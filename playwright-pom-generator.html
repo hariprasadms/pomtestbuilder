@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playwright POM Generator - Beta</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState } = React;
+
+        function App() {
+            const [pages, setPages] = useState([]);
+            const [pageName, setPageName] = useState('');
+            const [pageUrl, setPageUrl] = useState('');
+            const [baseUrl, setBaseUrl] = useState('https://demo.playwright.dev/todomvc');
+            const [testCode, setTestCode] = useState(`test('example todo test', async ({ page }) => {
+    await page.goto('https://demo.playwright.dev/todomvc');
+    await page.fill('.new-todo', 'Buy groceries');
+    await page.press('.new-todo', 'Enter');
+    await page.fill('.new-todo', 'Walk the dog');
+    await page.press('.new-todo', 'Enter');
+    await page.click('.todo-list li:first-child .toggle');
+    await page.waitForSelector('.todo-count');
+});`);
+            const [screenshotPreview, setScreenshotPreview] = useState('');
+            const [generatedFiles, setGeneratedFiles] = useState({});
+            const [activeTab, setActiveTab] = useState('pageObjects');
+            const [detectedElements, setDetectedElements] = useState([]);
+            const [showOutput, setShowOutput] = useState(false);
+
+            const addPage = () => {
+                if (!pageName.trim()) {
+                    alert('Please enter a page name');
+                    return;
+                }
+                setPages([...pages, { name: pageName, url: pageUrl }]);
+                setPageName('');
+                setPageUrl('');
+            };
+
+            const removePage = (index) => {
+                setPages(pages.filter((_, i) => i !== index));
+            };
+
+            const handleTestFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => setTestCode(event.target.result);
+                    reader.readAsText(file);
+                }
+            };
+
+            const handleScreenshotUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => setScreenshotPreview(event.target.result);
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const extractElementsFromCode = (code) => {
+                const elements = [];
+                const patterns = [
+                    { regex: /page\.fill\(['"`]([^'"`]+)['"`]/g, type: 'input' },
+                    { regex: /page\.click\(['"`]([^'"`]+)['"`]/g, type: 'button' },
+                    { regex: /page\.locator\(['"`]([^'"`]+)['"`]/g, type: 'element' },
+                    { regex: /page\.getByRole\(['"`]([^'"`]+)['"`]/g, type: 'role' },
+                    { regex: /page\.getByText\(['"`]([^'"`]+)['"`]/g, type: 'text' },
+                    { regex: /page\.waitForSelector\(['"`]([^'"`]+)['"`]/g, type: 'element' },
+                    { regex: /page\.press\(['"`]([^'"`]+)['"`]/g, type: 'element' },
+                    { regex: /page\.\$\(['"`]([^'"`]+)['"`]/g, type: 'element' }
+                ];
+
+                patterns.forEach(({ regex, type }) => {
+                    let match;
+                    while ((match = regex.exec(code)) !== null) {
+                        const selector = match[1];
+                        const name = generateElementName(selector, type);
+                        if (!elements.find(e => e.selector === selector)) {
+                            elements.push({ selector, type, name });
+                        }
+                    }
+                });
+                return elements;
+            };
+
+            const generateElementName = (selector, type) => {
+                let name = selector
+                    .replace(/[#.\[\]'"=:]/g, ' ')
+                    .trim()
+                    .split(/\s+/)
+                    .filter(w => w)
+                    .map((w, i) => i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+                    .join('');
+                const prefix = { input: 'input', button: 'btn', element: 'el', role: 'el', text: 'txt' }[type] || 'el';
+                return `${prefix}${(name || 'Element').charAt(0).toUpperCase() + (name || 'Element').slice(1)}`;
+            };
+
+            const generatePageObject = (page, elements) => {
+                const declarations = elements.map(el => `    private ${el.name} = '${el.selector}';`).join('\n');
+                const getters = elements.map(el => {
+                    const method = el.name.replace(/^(input|btn|el|txt)/, '');
+                    return `    async get${method.charAt(0).toUpperCase() + method.slice(1)}() {\n        return this.page.locator(this.${el.name});\n    }`;
+                }).join('\n\n');
+
+                const inputMethods = elements.filter(e => e.type === 'input').map(el => {
+                    const method = el.name.replace(/^input/, '');
+                    return `    async fill${method.charAt(0).toUpperCase() + method.slice(1)}(text: string) {\n        await this.page.locator(this.${el.name}).fill(text);\n    }`;
+                }).join('\n\n');
+
+                const clickMethods = elements.filter(e => e.type === 'button').map(el => {
+                    const method = el.name.replace(/^btn/, '');
+                    return `    async click${method.charAt(0).toUpperCase() + method.slice(1)}() {\n        await this.page.locator(this.${el.name}).click();\n    }`;
+                }).join('\n\n');
+
+                return `import { Page, Locator } from '@playwright/test';
+
+export class ${page.name} {
+    readonly page: Page;
+${declarations}
+
+    constructor(page: Page) {
+        this.page = page;
+    }
+${page.url ? `\n    async navigate() {\n        await this.page.goto('${page.url}');\n    }\n` : ''}
+${getters}
+${inputMethods ? '\n' + inputMethods : ''}
+${clickMethods ? '\n' + clickMethods : ''}
+
+    async waitForPageLoad() {
+        await this.page.waitForLoadState('networkidle');
+    }
+
+    async isVisible(selector: string): Promise<boolean> {
+        return await this.page.locator(selector).isVisible();
+    }
+}`;
+            };
+
+            const generateTestFile = (page, elements) => {
+                const inputElements = elements.filter(e => e.type === 'input');
+                const buttonElements = elements.filter(e => e.type === 'button');
+
+                return `import { test, expect, Page } from '@playwright/test';
+import { ${page.name} } from '../pages/${page.name}';
+
+test.describe('${page.name} Tests', () => {
+    let pageObject: ${page.name};
+
+    test.beforeEach(async ({ page }: { page: Page }) => {
+        pageObject = new ${page.name}(page);
+        ${page.url ? `await pageObject.navigate();` : `await page.goto('${baseUrl}');`}
+        await pageObject.waitForPageLoad();
+    });
+
+    test.afterEach(async ({ page }: { page: Page }) => {
+        // Cleanup after each test
+        console.log('Test completed, cleaning up...');
+    });
+
+    test('should load ${page.name} successfully', async ({ page }: { page: Page }) => {
+        await expect(page).toHaveURL(/./);
+        await expect(page).toHaveTitle(/./);
+    });
+
+    test('should interact with ${page.name} elements', async ({ page }: { page: Page }) => {
+        ${inputElements.slice(0, 2).map(el => {
+                    const method = el.name.replace(/^input/, '');
+                    return `await pageObject.fill${method.charAt(0).toUpperCase() + method.slice(1)}('test value');`;
+                }).join('\n        ')}
+        
+        ${buttonElements[0] ?
+                        `await pageObject.click${buttonElements[0].name.replace(/^btn/, '').charAt(0).toUpperCase() + buttonElements[0].name.replace(/^btn/, '').slice(1)}();` :
+                        '// Add button click actions here'
+                    }
+        
+        await pageObject.waitForPageLoad();
+    });
+
+    test('should validate ${page.name} elements are visible', async ({ page }: { page: Page }) => {
+        ${elements.slice(0, 3).map(el => {
+                        const method = el.name.replace(/^(input|btn|el|txt)/, '');
+                        return `const ${el.name} = await pageObject.get${method.charAt(0).toUpperCase() + method.slice(1)}();\n        await expect(${el.name}).toBeVisible();`;
+                    }).join('\n        ')}
+    });
+});`;
+            };
+
+            const generatePOM = () => {
+                if (!testCode.trim() || pages.length === 0) {
+                    alert('Please add at least one page and provide test code');
+                    return;
+                }
+
+                const elements = extractElementsFromCode(testCode);
+                setDetectedElements(elements);
+
+                const files = {};
+                pages.forEach(page => {
+                    files[`pages/${page.name}.ts`] = generatePageObject(page, elements);
+                    files[`tests/${page.name.toLowerCase()}.spec.ts`] = generateTestFile(page, elements);
+                });
+
+                files['playwright.config.ts'] = `import { defineConfig, devices } from '@playwright/test';
+
+/**
+ * Read environment variables from file.
+ * https://github.com/motdotla/dotenv
+ */
+// require('dotenv').config();
+
+export default defineConfig({
+    testDir: './tests',
+    fullyParallel: true,
+    forbidOnly: !!process.env.CI,
+    retries: process.env.CI ? 2 : 0,
+    workers: process.env.CI ? 1 : undefined,
+    reporter: [
+        ['html'],
+        ['json', { outputFile: 'test-results/results.json' }],
+        ['list']
+    ],
+    use: {
+        baseURL: '${baseUrl}',
+        trace: 'on-first-retry',
+        screenshot: 'only-on-failure',
+        video: 'retain-on-failure',
+        headless: true,
+        viewport: { width: 1280, height: 720 },
+        ignoreHTTPSErrors: true,
+        actionTimeout: 10000,
+    },
+
+    projects: [
+        {
+            name: 'chromium',
+            use: { ...devices['Desktop Chrome'] },
+        },
+        {
+            name: 'firefox',
+            use: { ...devices['Desktop Firefox'] },
+        },
+        {
+            name: 'webkit',
+            use: { ...devices['Desktop Safari'] },
+        },
+        {
+            name: 'Mobile Chrome',
+            use: { ...devices['Pixel 5'] },
+        },
+        {
+            name: 'Mobile Safari',
+            use: { ...devices['iPhone 12'] },
+        },
+    ],
+});`;
+
+                files['package.json'] = JSON.stringify({
+                    "name": "playwright-pom-framework",
+                    "version": "1.0.0",
+                    "description": "Playwright test automation framework with Page Object Model",
+                    "main": "index.js",
+                    "scripts": {
+                        "test": "playwright test",
+                        "test:headed": "playwright test --headed",
+                        "test:debug": "playwright test --debug",
+                        "test:ui": "playwright test --ui",
+                        "test:chrome": "playwright test --project=chromium",
+                        "test:firefox": "playwright test --project=firefox",
+                        "test:webkit": "playwright test --project=webkit",
+                        "test:mobile": "playwright test --project='Mobile Chrome'",
+                        "report": "playwright show-report",
+                        "codegen": "playwright codegen"
+                    },
+                    "keywords": ["playwright", "testing", "automation", "pom", "typescript"],
+                    "author": "Hari Prasad MS",
+                    "license": "MIT",
+                    "devDependencies": {
+                        "@playwright/test": "^1.41.0",
+                        "@types/node": "^20.11.0",
+                        "typescript": "^5.3.0"
+                    }
+                }, null, 2);
+
+                files['tsconfig.json'] = JSON.stringify({
+                    "compilerOptions": {
+                        "target": "ES2020",
+                        "module": "commonjs",
+                        "lib": ["ES2020"],
+                        "strict": true,
+                        "esModuleInterop": true,
+                        "skipLibCheck": true,
+                        "forceConsistentCasingInFileNames": true,
+                        "resolveJsonModule": true,
+                        "moduleResolution": "node",
+                        "types": ["node", "@playwright/test"],
+                        "outDir": "./dist",
+                        "rootDir": "./"
+                    },
+                    "include": ["tests/**/*", "pages/**/*"],
+                    "exclude": ["node_modules", "dist", "test-results", "playwright-report"]
+                }, null, 2);
+
+                files['README.md'] = `# Playwright POM Framework
+
+## 📋 Overview
+This is a test automation framework built with Playwright and TypeScript, following the Page Object Model (POM) design pattern.
+
+**Base URL:** ${baseUrl}
+
+## 🚀 Installation
+
+\`\`\`bash
+npm install
+npx playwright install
+\`\`\`
+
+## 🧪 Running Tests
+
+\`\`\`bash
+# Run all tests
+npm test
+
+# Run tests in headed mode
+npm run test:headed
+
+# Run tests in UI mode
+npm run test:ui
+
+# Run tests in specific browser
+npm run test:chrome
+npm run test:firefox
+npm run test:webkit
+npm run test:mobile
+
+# Debug tests
+npm run test:debug
+
+# View test report
+npm run report
+
+# Generate test code
+npm run codegen
+\`\`\`
+
+## 📁 Project Structure
+
+\`\`\`
+.
+├── pages/              # Page Object Models
+├── tests/              # Test specifications
+├── playwright.config.ts
+├── package.json
+├── tsconfig.json
+└── README.md
+\`\`\`
+
+## 🏗️ Page Object Model Pattern
+
+Each page object:
+- Encapsulates page-specific locators
+- Provides methods for page interactions
+- Handles wait conditions
+- Improves test maintainability
+
+## 📝 Writing Tests
+
+\`\`\`typescript
+import { test, expect } from '@playwright/test';
+import { YourPage } from '../pages/YourPage';
+
+test.describe('Your Tests', () => {
+    let pageObject: YourPage;
+
+    test.beforeEach(async ({ page }) => {
+        pageObject = new YourPage(page);
+        await pageObject.navigate();
+    });
+
+    test('example', async ({ page }) => {
+        // Your test logic
+    });
+});
+\`\`\`
+
+## 🎯 Best Practices
+
+1. Keep page objects focused on page interactions
+2. Use meaningful method names
+3. Add appropriate wait conditions
+4. Handle errors gracefully
+5. Use data-testid attributes when possible
+
+## 📊 Test Reports
+
+After running tests, view the HTML report:
+\`\`\`bash
+npm run report
+\`\`\`
+
+---
+Generated by [Playwright POM Generator](https://hariprasadms.github.io/)
+`;
+
+                files['.gitignore'] = `node_modules/
+test-results/
+playwright-report/
+playwright/.cache/
+dist/
+.env
+*.log
+.DS_Store
+package-lock.json`;
+
+                files['.vscode/settings.json'] = JSON.stringify({
+                    "playwright.reuseBrowser": true,
+                    "playwright.showTrace": false,
+                    "files.associations": {
+                        "*.spec.ts": "typescript"
+                    },
+                    "editor.codeActionsOnSave": {
+                        "source.organizeImports": true
+                    },
+                    "typescript.tsdk": "node_modules/typescript/lib"
+                }, null, 2);
+
+                setGeneratedFiles(files);
+                setShowOutput(true);
+            };
+
+            const downloadFile = (filename) => {
+                const blob = new Blob([generatedFiles[filename]], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename.split('/').pop();
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            const downloadAllFiles = async () => {
+                const zip = new JSZip();
+                Object.entries(generatedFiles).forEach(([name, content]) => zip.file(name, content));
+                const blob = await zip.generateAsync({ type: 'blob' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'playwright-framework.zip';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            const loadSample = () => {
+                setPages([{ name: 'TodoPage', url: 'https://demo.playwright.dev/todomvc' }]);
+                setBaseUrl('https://demo.playwright.dev/todomvc');
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-purple-600 to-indigo-700">
+                    {/* Header */}
+                    <header className="bg-white shadow-md">
+                        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+                            <div className="flex items-center gap-4">
+                                <h1 className="text-2xl font-bold text-purple-700">🎭 Playwright POM Generator</h1>
+                                <span className="bg-yellow-400 text-yellow-900 px-3 py-1 rounded-full text-xs font-bold">BETA</span>
+                            </div>
+                            <nav className="flex gap-6">
+                                <a href="https://playwright.dev/docs/pom" target="_blank" rel="noopener noreferrer" className="text-purple-700 hover:text-purple-900 font-medium transition">
+                                    📚 Docs
+                                </a>
+                                <a href="https://github.com/microsoft/playwright" target="_blank" rel="noopener noreferrer" className="text-purple-700 hover:text-purple-900 font-medium transition">
+                                    💻 GitHub
+                                </a>
+                                <a href="https://hariprasadms.github.io/" target="_blank" rel="noopener noreferrer" className="text-purple-700 hover:text-purple-900 font-medium transition">
+                                    👤 About
+                                </a>
+                            </nav>
+                        </div>
+                    </header>
+
+                    <div className="p-6">
+                        <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-2xl">
+                            <div className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white p-8 text-center">
+                                <h2 className="text-3xl font-bold">Convert Tests into Page Object Models</h2>
+                                <p className="text-lg mt-2">Professional TypeScript Framework Generator</p>
+                                <button onClick={loadSample} className="mt-4 bg-white text-purple-700 px-6 py-2 rounded-lg font-semibold hover:bg-gray-100 transition">
+                                    📝 Load Sample Application
+                                </button>
+                            </div>
+
+                            <div className="p-8">
+                                {/* Base URL Configuration */}
+                                <div className="mb-6 p-6 bg-blue-50 rounded-lg border-l-4 border-blue-600">
+                                    <h2 className="text-2xl font-semibold text-blue-700 mb-4">🌐 Application Base URL</h2>
+                                    <input
+                                        type="text"
+                                        className="w-full p-3 border-2 border-blue-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                                        value={baseUrl}
+                                        onChange={(e) => setBaseUrl(e.target.value)}
+                                        placeholder="https://your-application.com"
+                                    />
+                                    <p className="text-sm text-gray-600 mt-2">This will be used as the base URL in playwright.config.ts and tests</p>
+                                </div>
+
+                                {/* Page Configuration */}
+                                <div className="mb-6 p-6 bg-gray-50 rounded-lg border-l-4 border-purple-600">
+                                    <h2 className="text-2xl font-semibold text-purple-700 mb-4">📄 Step 1: Configure Pages</h2>
+                                    <div className="mb-3">
+                                        <label className="block mb-2 font-semibold text-gray-700">Page Name</label>
+                                        <input
+                                            type="text"
+                                            className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
+                                            value={pageName}
+                                            onChange={(e) => setPageName(e.target.value)}
+                                            placeholder="e.g., LoginPage, HomePage, CheckoutPage"
+                                        />
+                                    </div>
+                                    <div className="mb-3">
+                                        <label className="block mb-2 font-semibold text-gray-700">Page URL Path (optional)</label>
+                                        <input
+                                            type="text"
+                                            className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
+                                            value={pageUrl}
+                                            onChange={(e) => setPageUrl(e.target.value)}
+                                            placeholder="e.g., /login or https://example.com/login"
+                                        />
+                                    </div>
+                                    <button onClick={addPage} className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition">
+                                        + Add Page
+                                    </button>
+                                    <div className="flex flex-wrap gap-2 mt-4">
+                                        {pages.map((p, i) => (
+                                            <span key={i} className="bg-purple-600 text-white px-4 py-2 rounded-full flex items-center gap-2">
+                                                {p.name}
+                                                <span onClick={() => removePage(i)} className="cursor-pointer text-xl hover:text-red-200">×</span>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Test Code */}
+                                <div className="mb-6 p-6 bg-gray-50 rounded-lg border-l-4 border-purple-600">
+                                    <h2 className="text-2xl font-semibold text-purple-700 mb-4">📝 Step 2: Provide Test Code</h2>
+                                    <div className="mb-3">
+                                        <label className="block mb-2 font-semibold text-gray-700">Paste your Playwright test code</label>
+                                        <textarea
+                                            className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none font-mono text-sm"
+                                            rows="12"
+                                            value={testCode}
+                                            onChange={(e) => setTestCode(e.target.value)}
+                                            placeholder="Paste your Playwright test code here..."
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-2 font-semibold text-gray-700">Or upload a test file</label>
+                                        <input
+                                            type="file"
+                                            accept=".ts,.js"
+                                            onChange={handleTestFileUpload}
+                                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Screenshot */}
+                                <div className="mb-6 p-6 bg-gray-50 rounded-lg border-l-4 border-purple-600">
+                                    <h2 className="text-2xl font-semibold text-purple-700 mb-4">🖼️ Step 3: Upload Screenshot (Optional)</h2>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleScreenshotUpload}
+                                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                                    />
+                                    {screenshotPreview && (
+                                        <div className="mt-4">
+                                            <img src={screenshotPreview} alt="Screenshot preview" className="max-h-64 rounded-lg border-2 border-gray-300 shadow" />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Generate */}
+                                <div className="mb-6 p-6 bg-gray-50 rounded-lg border-l-4 border-purple-600">
+                                    <h2 className="text-2xl font-semibold text-purple-700 mb-4">⚡ Step 4: Generate Framework</h2>
+                                    <div className="flex gap-3 flex-wrap">
+                                        <button onClick={generatePOM} className="bg-purple-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-purple-700 transition shadow-lg">
+                                            🚀 Generate POM
+                                        </button>
+                                        <button onClick={() => { generatePOM(); setTimeout(downloadAllFiles, 500); }} className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-indigo-700 transition shadow-lg">
+                                            📦 Generate & Download ZIP
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Output */}
+                                {showOutput && (
+                                    <div className="mt-8">
+                                        <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-lg mb-6">
+                                            ✅ Generated {Object.keys(generatedFiles).length} files successfully!
+                                        </div>
+
+                                        <div className="flex gap-2 mb-4 border-b-2 border-gray-200 flex-wrap">
+                                            {['pageObjects', 'tests', 'config', 'elements'].map(tab => (
+                                                <button
+                                                    key={tab}
+                                                    onClick={() => setActiveTab(tab)}
+                                                    className={`px-6 py-3 font-semibold transition ${activeTab === tab ? 'text-purple-700 border-b-4 border-purple-700' : 'text-gray-600 hover:text-purple-600'}`}
+                                                >
+                                                    {tab === 'pageObjects' && '📄 Page Objects'}
+                                                    {tab === 'tests' && '🧪 Tests'}
+                                                    {tab === 'config' && '⚙️ Configuration'}
+                                                    {tab === 'elements' && `🎯 Elements (${detectedElements.length})`}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {activeTab === 'pageObjects' && Object.keys(generatedFiles).filter(f => f.startsWith('pages')).map(f => (
+                                            <div key={f} className="mb-6">
+                                                <h3 className="font-bold text-lg mb-2 text-purple-700">{f}</h3>
+                                                <pre className="bg-gray-900 text-white p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">{generatedFiles[f]}</pre>
+                                                <button onClick={() => downloadFile(f)} className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                                                    💾 Download {f.split('/').pop()}
+                                                </button>
+                                            </div>
+                                        ))}
+
+                                        {activeTab === 'tests' && Object.keys(generatedFiles).filter(f => f.startsWith('tests')).map(f => (
+                                            <div key={f} className="mb-6">
+                                                <h3 className="font-bold text-lg mb-2 text-purple-700">{f}</h3>
+                                                <pre className="bg-gray-900 text-white p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">{generatedFiles[f]}</pre>
+                                                <button onClick={() => downloadFile(f)} className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                                                    💾 Download {f.split('/').pop()}
+                                                </button>
+                                            </div>
+                                        ))}
+
+                                        {activeTab === 'config' && ['playwright.config.ts', 'package.json', 'tsconfig.json', 'README.md', '.gitignore', '.vscode/settings.json'].map(f => (
+                                            generatedFiles[f] && (
+                                                <div key={f} className="mb-6">
+                                                    <h3 className="font-bold text-lg mb-2 text-purple-700">{f}</h3>
+                                                    <pre className="bg-gray-900 text-white p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">{generatedFiles[f]}</pre>
+                                                    <button onClick={() => downloadFile(f)} className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                                                        💾 Download {f.split('/').pop()}
+                                                    </button>
+                                                </div>
+                                            )
+                                        ))}
+
+                                        {activeTab === 'elements' && (
+                                            <div>
+                                                <h3 className="font-bold text-lg mb-3 text-purple-700">Detected UI Elements:</h3>
+                                                {detectedElements.length > 0 ? (
+                                                    detectedElements.map((el, i) => (
+                                                        <div key={i} className="bg-white p-4 mb-3 rounded-lg border-l-4 border-purple-600 shadow">
+                                                            <div className="flex items-start justify-between">
+                                                                <div>
+                                                                    <strong className="text-purple-700 text-lg">{el.name}</strong>
+                                                                    <span className="ml-3 px-2 py-1 bg-purple-100 text-purple-700 rounded text-sm">{el.type}</span>
+                                                                </div>
+                                                            </div>
+                                                            <code className="block mt-2 bg-gray-100 px-3 py-2 rounded text-sm">{el.selector}</code>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <p className="text-gray-600">No elements detected in test code. Make sure your code contains page interactions.</p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        <div className="mt-8 p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg">
+                                            <h3 className="text-xl font-semibold mb-4">📦 Download Complete Framework</h3>
+                                            <button onClick={downloadAllFiles} className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white px-8 py-4 rounded-lg font-bold text-lg hover:from-purple-700 hover:to-indigo-800 shadow-lg transition">
+                                                📦 Download ZIP Archive
+                                            </button>
+                                            <p className="mt-3 text-gray-600 text-sm">
+                                                Includes: Page Objects, Tests with before/after hooks, Configuration files, VSCode settings, and README
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Footer */}
+                    <footer className="bg-gray-900 text-white py-8 mt-12">
+                        <div className="max-w-6xl mx-auto px-6">
+                            <div className="grid md:grid-cols-3 gap-8">
+                                <div>
+                                    <h3 className="text-xl font-bold mb-3">🎭 Playwright POM Generator</h3>
+                                    <p className="text-gray-400 text-sm">
+                                        Professional test automation framework generator for Playwright with TypeScript and Page Object Model pattern.
+                                    </p>
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold mb-3">Quick Links</h4>
+                                    <ul className="space-y-2 text-sm">
+                                        <li><a href="https://playwright.dev" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition">Playwright Docs</a></li>
+                                        <li><a href="https://playwright.dev/docs/pom" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition">POM Pattern Guide</a></li>
+                                        <li><a href="https://github.com/microsoft/playwright" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition">Playwright GitHub</a></li>
+                                        <li><a href="https://www.typescriptlang.org/" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition">TypeScript Docs</a></li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold mb-3">Created By</h4>
+                                    <p className="text-sm text-gray-400 mb-2">
+                                        Hari Prasad MS
+                                    </p>
+                                    <p className="text-sm text-gray-400 mb-2">
+                                        Portfolio: <a href="https://hariprasadms.github.io/" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 underline transition">hariprasadms.github.io</a>
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="border-t border-gray-800 mt-8 pt-6 text-center text-sm text-gray-400">
+                                <p>© {new Date().getFullYear()} Playwright POM Generator. All rights reserved.</p>
+                                <p className="mt-2">Built with ❤️ using React, TypeScript, and Playwright</p>
+                                <p className="mt-1 text-xs">Created by Hari Prasad MS</p>
+                            </div>
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+
+</html>
