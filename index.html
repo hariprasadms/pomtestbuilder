@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POM Builder - Test Automation Framework Generator</title>
+    <title>Page Object Models Builder — Effortlessly Craft Your Automation</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @keyframes fadeIn {
@@ -49,15 +49,87 @@
         .footer-link:hover::after {
             width: 100%;
         }
+
+        /* ── BETA MODAL ── */
+        .beta-backdrop {
+            position: fixed; inset: 0; z-index: 999;
+            background: rgba(10, 5, 30, 0.6);
+            backdrop-filter: blur(6px);
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+        .beta-backdrop.open { opacity: 1; pointer-events: all; }
+        .beta-modal {
+            background: #fff; border-radius: 20px; padding: 40px 36px;
+            max-width: 400px; width: 90%; text-align: center;
+            box-shadow: 0 32px 80px rgba(124,58,237,0.25), 0 0 0 1px rgba(124,58,237,0.1);
+            transform: translateY(14px) scale(0.97);
+            transition: transform 0.25s ease;
+            position: relative;
+        }
+        .beta-backdrop.open .beta-modal { transform: translateY(0) scale(1); }
+        .beta-close {
+            position: absolute; top: 14px; right: 16px;
+            background: none; border: none; cursor: pointer;
+            font-size: 20px; color: #9ca3af; line-height: 1;
+            transition: color 0.2s; padding: 2px 6px;
+        }
+        .beta-close:hover { color: #4b5563; }
+
+        /* ── BROWSER PREVIEW CHROME ── */
+        .browser-chrome {
+            background: #1e1b33;
+            border-radius: 12px 12px 0 0;
+            padding: 11px 16px 0;
+            display: flex; align-items: center; gap: 7px;
+        }
+        .ch-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .browser-body { background: #f8f7ff; border-radius: 0 0 12px 12px; overflow: hidden; }
+        .url-pill {
+            flex: 1; background: rgba(255,255,255,0.1); border-radius: 6px;
+            padding: 3px 10px; font-size: 10px; font-family: monospace;
+            color: rgba(255,255,255,0.5); margin-left: 6px;
+        }
     </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-purple-600 to-indigo-700">
+
+    <!-- Beta Modal -->
+    <div class="beta-backdrop" id="betaModal" onclick="if(event.target===this)closeBeta()">
+        <div class="beta-modal">
+            <button class="beta-close" onclick="closeBeta()">✕</button>
+            <div style="font-size:42px;margin-bottom:12px;">🚧</div>
+            <h2 style="font-size:20px;font-weight:800;color:#1f2937;margin-bottom:10px;">Under Development</h2>
+            <p style="font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:24px;">
+                Page Object Models Builder is currently in beta. Features are actively being developed and improved.
+                For inquiries or feedback, feel free to contact us.
+            </p>
+            <a href="mailto:contact@sderexperts.com"
+               style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;padding:10px 24px;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;box-shadow:0 4px 14px rgba(124,58,237,0.3);">
+                ✉️ Contact Us
+            </a>
+            <div style="margin-top:16px;">
+                <button onclick="closeBeta()" style="background:none;border:none;color:#9ca3af;font-size:13px;cursor:pointer;text-decoration:underline;">
+                    Dismiss
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Header -->
     <header class="bg-white shadow-md sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
-            <div class="flex items-center gap-4">
-                <h1 class="text-2xl font-bold text-purple-700">🏗️ POM Builder</h1>
-                <span class="bg-yellow-400 text-yellow-900 px-3 py-1 rounded-full text-xs font-bold animate-pulse">BETA</span>
+            <div class="flex items-center gap-3">
+                <span style="font-size:28px;">🏗️</span>
+                <div>
+                    <h1 class="text-xl font-extrabold text-purple-700 leading-tight">Page Object Models Builder</h1>
+                    <p class="text-xs text-gray-400 font-medium leading-tight">Effortlessly Craft Your Automation</p>
+                </div>
+                <button onclick="openBeta()"
+                    class="bg-yellow-400 text-yellow-900 px-3 py-1 rounded-full text-xs font-bold animate-pulse hover:bg-yellow-500 transition cursor-pointer border-none">
+                    BETA
+                </button>
             </div>
             <nav class="flex gap-6">
                 <a href="#features" class="text-purple-700 hover:text-purple-900 font-medium transition hover:underline">
@@ -84,15 +156,95 @@
                     <div class="absolute top-0 left-0 w-64 h-64 bg-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
                     <div class="absolute top-0 right-0 w-64 h-64 bg-indigo-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
                     <div class="absolute bottom-0 left-1/2 w-64 h-64 bg-pink-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
-                    
+
                     <div class="relative z-10">
-                        <h2 class="text-4xl md:text-5xl font-bold mb-4">Transform Tests into Page Objects</h2>
-                        <p class="text-xl md:text-2xl mb-6 text-purple-100">Professional TypeScript Framework Generator</p>
+                        <h2 class="text-4xl md:text-5xl font-bold mb-4">Build Page Object Models Instantly</h2>
+                        <p class="text-xl md:text-2xl mb-6 text-purple-100">Professional TypeScript Framework Generator for Playwright</p>
                         <a href="./playwright-pom-generator.html" class="inline-block bg-white text-purple-700 px-8 py-3 rounded-lg font-bold text-lg hover:bg-gray-100 transition shadow-lg transform hover:scale-105">
-                            🚀 Launch Playwright Builder
+                            🚀 Launch Page Object Models Builder
                         </a>
                         <p class="mt-4 text-sm text-purple-200">Support for Cypress and other frameworks coming soon!</p>
                     </div>
+                </div>
+
+                <!-- ── BUILDER PREVIEW IMAGE ── -->
+                <div class="p-8 bg-gradient-to-b from-white to-purple-50">
+                    <p class="text-center text-sm font-semibold text-purple-500 uppercase tracking-widest mb-6">See it in action</p>
+
+                    <!-- Browser mockup -->
+                    <div style="max-width:860px;margin:0 auto;box-shadow:0 24px 60px rgba(124,58,237,0.18);border-radius:14px;">
+                        <!-- Chrome bar -->
+                        <div class="browser-chrome">
+                            <div class="ch-dot" style="background:#ff5f57;"></div>
+                            <div class="ch-dot" style="background:#febc2e;"></div>
+                            <div class="ch-dot" style="background:#28c840;"></div>
+                            <div class="url-pill">playwright-pom-builder / generate</div>
+                        </div>
+                        <!-- App UI mockup -->
+                        <div class="browser-body" style="padding:24px;background:#f5f4fe;">
+
+                            <!-- Top bar -->
+                            <div style="display:flex;align-items:center;justify-content:space-between;background:white;border-radius:10px;padding:12px 20px;margin-bottom:16px;box-shadow:0 2px 8px rgba(124,58,237,0.07);border:1px solid rgba(124,58,237,0.08);">
+                                <div style="display:flex;align-items:center;gap:10px;">
+                                    <span style="font-size:18px;">🏗️</span>
+                                    <span style="font-weight:800;font-size:15px;color:#1f2937;">Page Object Models Builder</span>
+                                </div>
+                                <span style="font-size:11px;background:rgba(124,58,237,0.08);color:#7c3aed;padding:3px 10px;border-radius:20px;font-weight:600;">✨ Playwright</span>
+                            </div>
+
+                            <!-- Two column layout -->
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+                                <!-- Codegen input panel -->
+                                <div style="background:white;border-radius:10px;padding:16px;border:1px solid rgba(124,58,237,0.1);box-shadow:0 2px 8px rgba(124,58,237,0.06);">
+                                    <div style="font-size:11px;font-weight:700;color:#7c3aed;margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em;">🎬 Paste Codegen Output</div>
+                                    <div style="background:#0e0c1a;border-radius:8px;padding:12px;font-family:monospace;font-size:10px;color:#a78bfa;line-height:1.8;">
+                                        <span style="color:#6b7280;">// Playwright Codegen output</span><br>
+                                        <span style="color:#818cf8;">await</span> page.<span style="color:#34d399;">goto</span>(<span style="color:#fbbf24;">'https://app.example.com'</span>);<br>
+                                        <span style="color:#818cf8;">await</span> page.<span style="color:#34d399;">getByLabel</span>(<span style="color:#fbbf24;">'Email'</span>).<span style="color:#34d399;">fill</span>(<span style="color:#fbbf24;">'user@test.com'</span>);<br>
+                                        <span style="color:#818cf8;">await</span> page.<span style="color:#34d399;">getByRole</span>(<span style="color:#fbbf24;">'button'</span>, &#123; name: <span style="color:#fbbf24;">'Sign in'</span> &#125;).<span style="color:#34d399;">click</span>();
+                                    </div>
+                                    <div style="margin-top:10px;display:flex;gap:6px;">
+                                        <div style="flex:1;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;border-radius:7px;padding:8px;text-align:center;font-size:11px;font-weight:700;">✨ Generate Page Object Models</div>
+                                    </div>
+                                </div>
+
+                                <!-- Generated POM panel -->
+                                <div style="background:#1a1730;border-radius:10px;padding:16px;border:1px solid rgba(124,58,237,0.15);">
+                                    <div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em;">📄 Generated Page Object</div>
+                                    <div style="font-family:monospace;font-size:9.5px;color:#e5e7eb;line-height:1.9;">
+                                        <span style="color:#818cf8;">export class</span> <span style="color:#34d399;">LoginPage</span> &#123;<br>
+                                        &nbsp;&nbsp;<span style="color:#6b7280;">// Locators</span><br>
+                                        &nbsp;&nbsp;<span style="color:#818cf8;">private</span> inputEmail = <span style="color:#fbbf24;">'label=Email'</span>;<br>
+                                        &nbsp;&nbsp;<span style="color:#818cf8;">private</span> btnButtonSignIn = <span style="color:#fbbf24;">'[role="button"]'</span>;<br>
+                                        &nbsp;&nbsp;<br>
+                                        &nbsp;&nbsp;<span style="color:#818cf8;">async</span> <span style="color:#34d399;">fillInputEmail</span>(text: <span style="color:#f472b6;">string</span>) &#123;<br>
+                                        &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#818cf8;">await</span> (await <span style="color:#818cf8;">this</span>.<span style="color:#34d399;">getInputEmail</span>()).<span style="color:#34d399;">fill</span>(text);<br>
+                                        &nbsp;&nbsp;&#125;
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tab bar + file cards -->
+                            <div style="background:white;border-radius:10px;padding:14px 16px;border:1px solid rgba(124,58,237,0.08);box-shadow:0 2px 8px rgba(124,58,237,0.05);">
+                                <div style="display:flex;gap:4px;margin-bottom:12px;border-bottom:2px solid #f0eef8;padding-bottom:8px;">
+                                    <div style="padding:5px 14px;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;border-radius:6px 6px 0 0;font-size:11px;font-weight:700;">📄 Page Objects</div>
+                                    <div style="padding:5px 14px;color:#9ca3af;font-size:11px;font-weight:600;">🧪 Tests</div>
+                                    <div style="padding:5px 14px;color:#9ca3af;font-size:11px;font-weight:600;">⚙️ Config</div>
+                                    <div style="margin-left:auto;background:linear-gradient(135deg,#059669,#047857);color:white;padding:5px 14px;border-radius:6px;font-size:11px;font-weight:700;">📦 Download ZIP</div>
+                                </div>
+                                <div style="display:flex;gap:8px;">
+                                    <div style="background:#faf9ff;border:2px solid #7c3aed;border-radius:9px;padding:10px 14px;text-align:center;font-size:10px;font-weight:700;color:#7c3aed;">📄<br>LoginPage</div>
+                                    <div style="background:#faf9ff;border:2px solid #ede9ff;border-radius:9px;padding:10px 14px;text-align:center;font-size:10px;font-weight:600;color:#6b7280;">📄<br>HomePage</div>
+                                    <div style="background:#faf9ff;border:2px solid #ede9ff;border-radius:9px;padding:10px 14px;text-align:center;font-size:10px;font-weight:600;color:#6b7280;">📄<br>DashboardPage</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Caption -->
+                    <p class="text-center text-sm text-gray-500 mt-6">
+                        Paste Playwright Codegen output → get a complete Page Object Model framework with typed locators, getters &amp; actions.
+                    </p>
                 </div>
             </div>
         </div>
@@ -108,13 +260,13 @@
                     <div class="group bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border-2 border-blue-200 hover:border-blue-400 transition transform hover:-translate-y-2 hover:shadow-xl">
                         <div class="text-4xl mb-4 group-hover:scale-110 transition">🎨</div>
                         <h3 class="text-xl font-bold mb-3 text-blue-900">User-Friendly Interface</h3>
-                        <p class="text-gray-700">Simplifies the process of creating POMs with clear, intuitive input fields and step-by-step guidance.</p>
+                        <p class="text-gray-700">Simplifies the process of creating Page Object Models with clear, intuitive input fields and step-by-step guidance.</p>
                     </div>
 
                     <!-- Feature 2 -->
                     <div class="group bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl border-2 border-purple-200 hover:border-purple-400 transition transform hover:-translate-y-2 hover:shadow-xl">
                         <div class="text-4xl mb-4 group-hover:scale-110 transition">⚡</div>
-                        <h3 class="text-xl font-bold mb-3 text-purple-900">Automated POM Generation</h3>
+                        <h3 class="text-xl font-bold mb-3 text-purple-900">Automated Page Object Models</h3>
                         <p class="text-gray-700">Generate structured Page Object Model files with sample code that you can customize for your needs.</p>
                     </div>
 
@@ -136,7 +288,7 @@
                     <div class="group bg-gradient-to-br from-pink-50 to-pink-100 p-6 rounded-xl border-2 border-pink-200 hover:border-pink-400 transition transform hover:-translate-y-2 hover:shadow-xl">
                         <div class="text-4xl mb-4 group-hover:scale-110 transition">📦</div>
                         <h3 class="text-xl font-bold mb-3 text-pink-900">Downloadable Packages</h3>
-                        <p class="text-gray-700">Provides a ready-to-use ZIP file containing the POM, test scripts, and utility functions.</p>
+                        <p class="text-gray-700">Provides a ready-to-use ZIP file containing the Page Object Models, test scripts, and utility functions.</p>
                     </div>
 
                     <!-- Feature 6 -->
@@ -177,7 +329,7 @@
                     Create professional Page Object Models in minutes. No installation required, works directly in your browser.
                 </p>
                 <a href="./playwright-pom-generator.html" class="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-10 py-4 rounded-lg font-bold text-xl hover:from-purple-700 hover:to-indigo-700 transition transform hover:scale-105 shadow-lg">
-                    🚀 Start Building Now
+                    🚀 Start Building Page Object Models
                 </a>
             </div>
         </div>
@@ -192,9 +344,12 @@
                 <div class="md:col-span-1">
                     <div class="flex items-center gap-2 mb-4">
                         <span class="text-3xl">🏗️</span>
-                        <h3 class="text-xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-                            POM Builder
-                        </h3>
+                        <div>
+                            <h3 class="text-base font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent leading-tight">
+                                Page Object Models Builder
+                            </h3>
+                            <p class="text-gray-500 text-xs">Effortlessly Craft Your Automation</p>
+                        </div>
                     </div>
                     <p class="text-gray-400 text-sm leading-relaxed">
                         Professional test automation framework generator for modern testing tools.
@@ -274,7 +429,7 @@
             <div class="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div class="text-center md:text-left">
                     <p class="text-gray-400 text-sm">
-                        © 2025 POM Builder. All rights reserved.
+                        © 2026 Page Object Models Builder | Hariprasad MS
                     </p>
                 </div>
                 
@@ -299,5 +454,18 @@
             </div>
         </div>
     </footer>
+
+    <script>
+        function openBeta() {
+            document.getElementById('betaModal').classList.add('open');
+        }
+        function closeBeta() {
+            document.getElementById('betaModal').classList.remove('open');
+        }
+        // Close on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeBeta();
+        });
+    </script>
 </body>
 </html>
