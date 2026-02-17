@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Playwright POM Generator - Create Page Objects</title>
+    <title>Playwright POM Builder</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -13,212 +13,439 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/typescript.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
-    <link rel="stylesheet" href="./css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        .code-card {
-            transition: all 0.3s ease;
-            border-left: 4px solid transparent;
+        * { font-family: 'DM Sans', sans-serif; box-sizing: border-box; }
+        code, pre, .mono { font-family: 'JetBrains Mono', monospace; }
+
+        body { background: #f5f4fe; margin: 0; }
+
+        /* ── INPUTS ── */
+        .pom-input {
+            width: 100%; padding: 11px 14px;
+            border: 2px solid #ede9ff; border-radius: 10px;
+            font-size: 14px; outline: none; transition: border 0.2s, box-shadow 0.2s;
+            background: #faf9ff; color: #1f2937;
+            font-family: 'DM Sans', sans-serif;
         }
-        .code-card:hover {
-            transform: translateX(4px);
-            border-left-color: #7c3aed;
-            box-shadow: 0 10px 25px rgba(124, 58, 237, 0.2);
+        .pom-input:focus { border-color: #7c3aed; background: white; box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
+        .pom-label { display: block; font-weight: 600; font-size: 13px; color: #4b5563; margin-bottom: 6px; }
+
+        /* ── BUTTONS ── */
+        .btn-primary {
+            background: linear-gradient(135deg, #7c3aed, #4f46e5);
+            color: white; padding: 11px 24px; border-radius: 10px;
+            font-weight: 700; font-size: 14px; cursor: pointer;
+            border: none; transition: all 0.2s;
+            box-shadow: 0 4px 14px rgba(124,58,237,0.3);
+            font-family: 'DM Sans', sans-serif;
         }
-        .tab-button {
-            position: relative;
-            transition: all 0.3s ease;
+        .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(124,58,237,0.4); }
+        .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .btn-secondary {
+            background: white; color: #7c3aed; padding: 11px 24px; border-radius: 10px;
+            font-weight: 700; font-size: 14px; cursor: pointer;
+            border: 2px solid rgba(124,58,237,0.25); transition: all 0.2s;
+            font-family: 'DM Sans', sans-serif;
         }
-        .tab-button::after {
-            content: '';
-            position: absolute;
-            bottom: -2px;
-            left: 0;
-            width: 0;
-            height: 3px;
-            background: linear-gradient(90deg, #7c3aed, #6366f1);
-            transition: width 0.3s ease;
+        .btn-secondary:hover:not(:disabled) { border-color: #7c3aed; background: rgba(124,58,237,0.04); }
+        .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* ── CARD ── */
+        .section-card {
+            background: white; border-radius: 14px;
+            border: 1px solid rgba(124,58,237,0.1);
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(124,58,237,0.06);
+            overflow: hidden;
         }
-        .tab-button.active::after,
-        .tab-button:hover::after {
-            width: 100%;
+        .section-head {
+            padding: 16px 24px; border-bottom: 1px solid rgba(124,58,237,0.07);
+            display: flex; align-items: center; gap: 10px;
         }
-        .file-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 9999px;
-            font-weight: 600;
-            font-size: 0.875rem;
-            box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
-            transition: all 0.3s ease;
+        .section-head-title { font-weight: 700; font-size: 16px; color: #1f2937; }
+        .section-body { padding: 24px; }
+
+        /* ── TABS ── */
+        .output-tabs { display: flex; border-bottom: 2px solid #f0eef8; margin-bottom: 20px; gap: 2px; }
+        .output-tab {
+            padding: 10px 22px; font-weight: 600; font-size: 14px; cursor: pointer;
+            position: relative; color: #9ca3af; border: none; background: none;
+            transition: color 0.2s; border-radius: 8px 8px 0 0;
+            font-family: 'DM Sans', sans-serif;
         }
-        .file-badge:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+        .output-tab:hover { color: #7c3aed; background: rgba(124,58,237,0.04); }
+        .output-tab.active { color: #7c3aed; }
+        .output-tab.active::after {
+            content: ''; position: absolute; bottom: -2px; left: 0; right: 0;
+            height: 2px; background: linear-gradient(90deg, #7c3aed, #4f46e5); border-radius: 1px;
         }
-        pre code {
-            border-radius: 12px !important;
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+        .tab-count {
+            margin-left: 6px; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 700;
         }
-        .copy-button {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            opacity: 0;
-            transition: opacity 0.3s ease;
+
+        /* ── FILE GRID ── */
+        .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px,1fr)); gap: 10px; margin-bottom: 20px; }
+        .file-card {
+            background: #faf9ff; border: 2px solid #ede9ff; border-radius: 12px;
+            padding: 16px 12px; cursor: pointer; transition: all 0.2s; text-align: center;
         }
-        .code-wrapper:hover .copy-button {
-            opacity: 1;
+        .file-card:hover { border-color: #7c3aed; transform: translateY(-2px); box-shadow: 0 6px 16px rgba(124,58,237,0.15); }
+        .file-card.active { border-color: #7c3aed; background: rgba(124,58,237,0.06); box-shadow: 0 4px 12px rgba(124,58,237,0.2); }
+        .file-card-icon { font-size: 26px; margin-bottom: 8px; }
+        .file-card-name { font-size: 11px; font-weight: 600; color: #4b5563; word-break: break-all; }
+        .file-card.active .file-card-name { color: #7c3aed; }
+
+        /* ── CODE VIEWER ── */
+        .code-viewer {
+            background: #1a1730; border-radius: 12px; overflow: hidden;
+            border: 1px solid rgba(124,58,237,0.15);
         }
-        .download-icon {
-            animation: bounce 2s infinite;
+        .code-viewer-bar {
+            background: #211e38; padding: 10px 16px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
         }
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
+        .code-viewer-filename { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a78bfa; }
+        .cv-btn {
+            padding: 5px 13px; border-radius: 6px; font-size: 12px; font-weight: 600;
+            cursor: pointer; border: 1px solid; transition: all 0.2s; font-family: 'DM Sans', sans-serif;
+        }
+        .cv-btn-copy { background: rgba(107,114,128,0.15); border-color: rgba(107,114,128,0.3); color: #9ca3af; }
+        .cv-btn-copy:hover, .cv-btn-copy.copied { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.4); color: #6ee7b7; }
+        .cv-btn-dl { background: rgba(124,58,237,0.15); border-color: rgba(124,58,237,0.3); color: #a78bfa; margin-left: 8px; }
+        .cv-btn-dl:hover { background: rgba(124,58,237,0.25); }
+        .code-viewer pre { margin: 0 !important; }
+        .code-viewer pre code { border-radius: 0 !important; box-shadow: none !important; }
+
+        /* ── PAGE PILL ── */
+        .page-pill {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: linear-gradient(135deg, #7c3aed, #4f46e5);
+            color: white; padding: 6px 14px; border-radius: 999px;
+            font-weight: 600; font-size: 13px;
+            box-shadow: 0 4px 12px rgba(124,58,237,0.3);
+        }
+
+        /* ── CODEGEN GUIDE ── */
+        .codegen-guide {
+            background: #12101f; border-radius: 14px;
+            border: 1px solid rgba(124,58,237,0.2);
+            overflow: hidden;
+        }
+        .codegen-step {
+            display: flex; gap: 16px; padding: 18px 22px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            align-items: flex-start;
+        }
+        .codegen-step:last-child { border-bottom: none; }
+        .step-num {
+            width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+            background: linear-gradient(135deg, #7c3aed, #4f46e5);
+            color: white; display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 13px;
+        }
+        .step-content { flex: 1; }
+        .step-title { color: #e5e7eb; font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+        .step-desc { color: #6b7280; font-size: 13px; line-height: 1.6; }
+        .cmd-block {
+            background: rgba(0,0,0,0.4); border: 1px solid rgba(124,58,237,0.25);
+            border-radius: 8px; padding: 10px 14px; margin-top: 8px;
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        }
+        .cmd-text {
+            font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #a78bfa;
+            flex: 1; word-break: break-all;
+        }
+        .copy-cmd-btn {
+            background: rgba(124,58,237,0.2); border: 1px solid rgba(124,58,237,0.3);
+            color: #c084fc; padding: 4px 10px; border-radius: 6px;
+            font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;
+            transition: all 0.2s; font-family: 'DM Sans', sans-serif;
+        }
+        .copy-cmd-btn:hover { background: rgba(124,58,237,0.35); }
+        .copy-cmd-btn.ok { background: rgba(5,150,105,0.2); border-color: rgba(5,150,105,0.4); color: #6ee7b7; }
+
+        /* ── CODEGEN INPUT AREA ── */
+        .codegen-paste-area {
+            width: 100%; min-height: 200px; padding: 14px;
+            background: #0e0c1a; border: 2px solid rgba(124,58,237,0.2);
+            border-radius: 10px; color: #a78bfa; resize: vertical;
+            font-family: 'JetBrains Mono', monospace; font-size: 12px;
+            outline: none; transition: border 0.2s; line-height: 1.6;
+        }
+        .codegen-paste-area:focus { border-color: rgba(124,58,237,0.5); }
+        .codegen-paste-area::placeholder { color: #3d3661; }
+
+        /* ── RECORDING MODE TOGGLE ── */
+        .mode-toggle {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 0; border: 2px solid rgba(124,58,237,0.15);
+            border-radius: 12px; overflow: hidden;
+        }
+        .mode-btn {
+            padding: 14px; text-align: center; cursor: pointer;
+            font-weight: 600; font-size: 14px; transition: all 0.2s;
+            border: none; font-family: 'DM Sans', sans-serif;
+        }
+        .mode-btn.active { background: linear-gradient(135deg, #7c3aed, #4f46e5); color: white; }
+        .mode-btn:not(.active) { background: white; color: #9ca3af; }
+        .mode-btn:not(.active):hover { background: rgba(124,58,237,0.05); color: #7c3aed; }
+
+        /* Detected elements preview */
+        .element-chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 10px; border-radius: 6px; font-size: 11px;
+            font-family: 'JetBrains Mono', monospace; margin: 3px;
+        }
+        .el-click { background: rgba(99,102,241,0.12); color: #6366f1; border: 1px solid rgba(99,102,241,0.2); }
+        .el-fill  { background: rgba(5,150,105,0.1);   color: #059669; border: 1px solid rgba(5,150,105,0.2); }
+        .el-nav   { background: rgba(59,130,246,0.1);  color: #3b82f6; border: 1px solid rgba(59,130,246,0.2); }
+
+        /* Success */
+        .success-banner {
+            background: linear-gradient(135deg, rgba(5,150,105,0.08), rgba(16,185,129,0.1));
+            border: 1px solid rgba(5,150,105,0.2); border-radius: 12px;
+            padding: 16px 20px; display: flex; align-items: center; gap: 14px; margin-bottom: 24px;
         }
     </style>
 </head>
 <body>
-    <div id="root"></div>
-    
-    <script type="text/babel">
-        const { useState, useEffect } = React;
+<div id="root"></div>
 
-        function App() {
-            const [pages, setPages] = useState([]);
-            const [pageName, setPageName] = useState('');
-            const [pageUrl, setPageUrl] = useState('');
-            const [baseUrl, setBaseUrl] = useState('https://demo.playwright.dev/todomvc');
-            const [generatedFiles, setGeneratedFiles] = useState({});
-            const [mainTab, setMainTab] = useState('pageObjects');
-            const [selectedPageObject, setSelectedPageObject] = useState(null);
-            const [selectedTest, setSelectedTest] = useState(null);
-            const [selectedConfig, setSelectedConfig] = useState(null);
-            const [showOutput, setShowOutput] = useState(false);
-            const [copiedFile, setCopiedFile] = useState(null);
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
 
-            useEffect(() => {
-                if (showOutput && Object.keys(generatedFiles).length > 0) {
-                    setTimeout(() => {
-                        document.querySelectorAll('pre code').forEach((block) => {
-                            hljs.highlightElement(block);
-                        });
-                    }, 100);
-                }
-            }, [showOutput, generatedFiles, selectedPageObject, selectedTest, selectedConfig, mainTab]);
+/* ─── CODEGEN PARSER ───────────────────────────────────────────── */
+// Extracts a human-readable identifier from any Playwright locator expression.
+// Works for locator('css'), getByRole('btn',{name:'x'}), getByLabel('x'), etc.
+function extractLocatorId(expr) {
+    if (!expr) return { selector: '', label: '' };
 
-            const copyToClipboard = (content, filename) => {
-                navigator.clipboard.writeText(content).then(() => {
-                    setCopiedFile(filename);
-                    setTimeout(() => setCopiedFile(null), 2000);
-                });
-            };
+    // page.locator('css-selector')
+    let m = expr.match(/(?:^|\.)locator\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+    if (m) return { selector: m[1], label: m[1] };
 
-            const validatePageName = (name) => {
-                if (!name || name.trim().length === 0) {
-                    return { valid: false, error: 'Page name is required' };
-                }
-                if (!/^[A-Z][a-zA-Z0-9]*$/.test(name)) {
-                    return { valid: false, error: 'Page name must start with capital letter and contain only alphanumeric characters' };
-                }
-                if (!name.endsWith('Page')) {
-                    return { valid: false, error: 'Page name should end with "Page" (e.g., LoginPage)' };
-                }
-                return { valid: true };
-            };
+    // getByRole('role', { name: 'x' })  →  use "role:name" as id
+    m = expr.match(/getByRole\(\s*['"`]([^'"`]+)['"`](?:\s*,\s*\{[^}]*name\s*:\s*['"`]([^'"`]*)['"`][^}]*\})?\s*\)/);
+    if (m) { const id = m[2] ? `${m[1]}-${m[2]}` : m[1]; return { selector: `[role="${m[1]}"]`, label: id }; }
 
-            const addPage = () => {
-                const validation = validatePageName(pageName);
-                if (!validation.valid) {
-                    alert(validation.error);
-                    return;
-                }
-                setPages([...pages, { name: pageName, url: pageUrl }]);
-                setPageName('');
-                setPageUrl('');
-            };
+    // getByLabel('x')
+    m = expr.match(/getByLabel\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+    if (m) return { selector: `label=${m[1]}`, label: m[1] };
 
-            const removePage = (index) => {
-                setPages(pages.filter((_, i) => i !== index));
-            };
+    // getByPlaceholder('x')
+    m = expr.match(/getByPlaceholder\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+    if (m) return { selector: `[placeholder="${m[1]}"]`, label: m[1] };
 
-            const generateSamplePageObject = (page) => {
-                return `import { Page, Locator } from '@playwright/test';
+    // getByTestId('x')
+    m = expr.match(/getByTestId\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+    if (m) return { selector: `[data-testid="${m[1]}"]`, label: m[1] };
 
-export class ${page.name} {
+    // getByText('x')
+    m = expr.match(/getByText\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+    if (m) return { selector: `text=${m[1]}`, label: m[1] };
+
+    // getByTitle('x')
+    m = expr.match(/getByTitle\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+    if (m) return { selector: `[title="${m[1]}"]`, label: m[1] };
+
+    // getByAltText('x')
+    m = expr.match(/getByAltText\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+    if (m) return { selector: `[alt="${m[1]}"]`, label: m[1] };
+
+    // page.fill('css', 'val') / page.click('css') — legacy style
+    m = expr.match(/page\.\w+\(\s*['"`]([^'"`]+)['"`]/);
+    if (m) return { selector: m[1], label: m[1] };
+
+    return { selector: '', label: '' };
+}
+
+function parseCodegen(raw) {
+    // Collapse multi-line chained calls onto one line so we can match them
+    const collapsed = raw
+        .replace(/\r\n/g, '\n')
+        .replace(/\n\s*\./g, '.')   // join continuation lines starting with .
+        .split('\n');
+
+    const steps = [];
+
+    collapsed.forEach((line, i) => {
+        const t = line.trim();
+        if (!t || t.startsWith('//') || t.startsWith('import') || t.startsWith('*')) return;
+        // Skip test/describe/beforeEach boilerplate lines that have no locator
+        if (/^(const|let|var)\s+\w+\s*=\s*(await\s+)?page\.(goto|waitFor)/.test(t) === false
+            && /^(test|test\.describe|test\.beforeEach|test\.afterEach|expect\()/.test(t)) return;
+
+        // ── NAVIGATE ──────────────────────────────────────────
+        let m = t.match(/page\.goto\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+        if (m) { steps.push({ type:'navigate', selector: m[1], label: m[1], value:'', raw: t, line: i+1 }); return; }
+
+        m = t.match(/page\.waitForURL\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+        if (m) { steps.push({ type:'waitUrl', selector: m[1], label: m[1], value:'', raw: t, line: i+1 }); return; }
+
+        // ── FILL / TYPE ────────────────────────────────────────
+        // locator(...).fill('value')
+        m = t.match(/((?:page\.)?(?:locator|getBy\w+)\([^)]+\)(?:\.\w+\([^)]*\))*?)\.fill\(\s*['"`]([^'"`]*)['"`]\s*\)/);
+        if (m) {
+            const { selector, label } = extractLocatorId(m[1]);
+            if (selector) { steps.push({ type:'fill', selector, label, value: m[2], raw: t, line: i+1 }); return; }
+        }
+        // page.fill('css', 'val')
+        m = t.match(/page\.fill\(\s*['"`]([^'"`]+)['"`]\s*,\s*['"`]([^'"`]*)['"`]\s*\)/);
+        if (m) { steps.push({ type:'fill', selector: m[1], label: m[1], value: m[2], raw: t, line: i+1 }); return; }
+
+        // ── PRESS / KEYBOARD ──────────────────────────────────
+        m = t.match(/((?:page\.)?(?:locator|getBy\w+)\([^)]+\)(?:\.\w+\([^)]*\))*?)\.press\(\s*['"`]([^'"`]*)['"`]\s*\)/);
+        if (m) {
+            const { selector, label } = extractLocatorId(m[1]);
+            if (selector) { steps.push({ type:'press', selector, label, value: m[2], raw: t, line: i+1 }); return; }
+        }
+
+        // ── SELECT OPTION ─────────────────────────────────────
+        m = t.match(/((?:page\.)?(?:locator|getBy\w+)\([^)]+\)(?:\.\w+\([^)]*\))*?)\.selectOption\(\s*['"`]([^'"`]*)['"`]\s*\)/);
+        if (m) {
+            const { selector, label } = extractLocatorId(m[1]);
+            if (selector) { steps.push({ type:'select', selector, label, value: m[2], raw: t, line: i+1 }); return; }
+        }
+        m = t.match(/page\.selectOption\(\s*['"`]([^'"`]+)['"`]\s*,\s*['"`]([^'"`]*)['"`]\s*\)/);
+        if (m) { steps.push({ type:'select', selector: m[1], label: m[1], value: m[2], raw: t, line: i+1 }); return; }
+
+        // ── CHECK / UNCHECK ───────────────────────────────────
+        m = t.match(/((?:page\.)?(?:locator|getBy\w+)\([^)]+\)(?:\.\w+\([^)]*\))*?)\.(check|uncheck)\(\s*\)/);
+        if (m) {
+            const { selector, label } = extractLocatorId(m[1]);
+            if (selector) { steps.push({ type: m[2], selector, label, value:'', raw: t, line: i+1 }); return; }
+        }
+        m = t.match(/page\.(check|uncheck)\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+        if (m) { steps.push({ type: m[1], selector: m[2], label: m[2], value:'', raw: t, line: i+1 }); return; }
+
+        // ── HOVER ─────────────────────────────────────────────
+        m = t.match(/((?:page\.)?(?:locator|getBy\w+)\([^)]+\)(?:\.\w+\([^)]*\))*?)\.hover\(\s*\)/);
+        if (m) {
+            const { selector, label } = extractLocatorId(m[1]);
+            if (selector) { steps.push({ type:'hover', selector, label, value:'', raw: t, line: i+1 }); return; }
+        }
+
+        // ── WAIT FOR SELECTOR ─────────────────────────────────
+        m = t.match(/page\.waitForSelector\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+        if (m) { steps.push({ type:'wait', selector: m[1], label: m[1], value:'', raw: t, line: i+1 }); return; }
+
+        // ── CLICK (last — most general) ────────────────────────
+        // locator/getBy*.click()
+        m = t.match(/((?:page\.)?(?:locator|getBy\w+)\([^)]+\)(?:\.\w+\([^)]*\))*?)\.click\(\s*\)/);
+        if (m) {
+            const { selector, label } = extractLocatorId(m[1]);
+            if (selector) { steps.push({ type:'click', selector, label, value:'', raw: t, line: i+1 }); return; }
+        }
+        // page.click('css')
+        m = t.match(/page\.click\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+        if (m) { steps.push({ type:'click', selector: m[1], label: m[1], value:'', raw: t, line: i+1 }); return; }
+    });
+
+    return steps;
+}
+
+/* ─── SMART NAME FROM SELECTOR ────────────────────────────────── */
+function selectorToName(label, type) {
+    // label is the human-readable tag (e.g. "submit-button", "email", "username")
+    // strip anything non-alphanumeric, camelCase it
+    const words = (label || 'element')
+        .replace(/[^a-zA-Z0-9]+/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 4);
+    const camel = words.map((w, i) =>
+        i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+    ).join('');
+    const prefix = type === 'fill' ? 'input'
+        : (type === 'click' || type === 'hover') ? 'btn'
+        : type === 'select' ? 'select'
+        : type === 'check' || type === 'uncheck' ? 'chk'
+        : 'el';
+    const base = camel || 'Element';
+    return `${prefix}${base.charAt(0).toUpperCase()}${base.slice(1)}`;
+}
+
+/* ─── DEDUPE ELEMENTS ──────────────────────────────────────────── */
+function buildElements(steps) {
+    const bySelector = {};   // selector → element entry
+    const usedNames  = {};   // name → count (collision guard)
+
+    steps
+        .filter(s => s.selector && !['navigate', 'wait', 'waitUrl', 'press'].includes(s.type))
+        .forEach(s => {
+            if (bySelector[s.selector]) return;  // already seen
+            let name = selectorToName(s.label || s.selector, s.type);
+            // deduplicate names
+            if (usedNames[name] !== undefined) {
+                usedNames[name]++;
+                name = `${name}${usedNames[name]}`;
+            } else {
+                usedNames[name] = 0;
+            }
+            bySelector[s.selector] = { selector: s.selector, label: s.label, type: s.type, name };
+        });
+
+    return Object.values(bySelector);
+}
+
+/* ─── PAGE OBJECT GENERATOR ────────────────────────────────────── */
+function buildPageObject(pageName, pageUrl, steps) {
+    const elements = buildElements(steps);
+    const navUrl   = steps.find(s => s.type === 'navigate')?.selector || pageUrl;
+
+    const decl = elements.length
+        ? elements.map(e => `    private ${e.name} = '${e.selector}';${e.label && e.label !== e.selector ? `  // ${e.label}` : ''}`).join('\n')
+        : `    // TODO: add your locators here`;
+
+    const getters = elements.map(e => {
+        const M = e.name.charAt(0).toUpperCase() + e.name.slice(1);
+        return `    async get${M}(): Promise<Locator> {\n        return this.page.locator(this.${e.name});\n    }`;
+    }).join('\n\n');
+
+    const actions = elements.map(e => {
+        const M = e.name.charAt(0).toUpperCase() + e.name.slice(1);
+        if (e.type === 'fill')
+            return `    async fill${M}(text: string): Promise<void> {\n        await (await this.get${M}()).fill(text);\n    }`;
+        if (e.type === 'select')
+            return `    async select${M}(option: string): Promise<void> {\n        await this.page.selectOption(this.${e.name}, option);\n    }`;
+        if (e.type === 'check')
+            return `    async check${M}(): Promise<void> {\n        await this.page.check(this.${e.name});\n    }`;
+        if (e.type === 'uncheck')
+            return `    async uncheck${M}(): Promise<void> {\n        await this.page.uncheck(this.${e.name});\n    }`;
+        if (e.type === 'hover')
+            return `    async hover${M}(): Promise<void> {\n        await (await this.get${M}()).hover();\n    }`;
+        // default → click
+        return `    async click${M}(): Promise<void> {\n        await (await this.get${M}()).click();\n    }`;
+    }).join('\n\n');
+
+    return `import { Page, Locator } from '@playwright/test';
+
+export class ${pageName} {
     readonly page: Page;
-    
-    // TODO: Replace these sample locators with your actual page elements
-    private usernameInput = '#username';
-    private passwordInput = '#password';
-    private submitButton = 'button[type="submit"]';
-    private errorMessage = '.error-message';
-    private successMessage = '.success-message';
-    
+
+    // ── Locators ──────────────────────────────────
+${decl}
+
     constructor(page: Page) {
         this.page = page;
     }
-${page.url ? `
+${navUrl ? `
     async navigate(): Promise<void> {
-        await this.page.goto('${page.url}');
+        await this.page.goto('${navUrl}');
     }
 ` : ''}
-    // Getter Methods - Returns Promise<Locator>
-    async getUsernameInput(): Promise<Locator> {
-        return this.page.locator(this.usernameInput);
-    }
+    // ── Getters ───────────────────────────────────
+${getters || '    // no elements detected — paste codegen output and try again'}
 
-    async getPasswordInput(): Promise<Locator> {
-        return this.page.locator(this.passwordInput);
-    }
+    // ── Actions ───────────────────────────────────
+${actions || '    // no elements detected — paste codegen output and try again'}
 
-    async getSubmitButton(): Promise<Locator> {
-        return this.page.locator(this.submitButton);
-    }
-
-    async getErrorMessage(): Promise<Locator> {
-        return this.page.locator(this.errorMessage);
-    }
-
-    async getSuccessMessage(): Promise<Locator> {
-        return this.page.locator(this.successMessage);
-    }
-
-    // Action Methods - Returns Promise<void>
-    async fillUsername(username: string): Promise<void> {
-        await (await this.getUsernameInput()).fill(username);
-    }
-
-    async fillPassword(password: string): Promise<void> {
-        await (await this.getPasswordInput()).fill(password);
-    }
-
-    async clickSubmit(): Promise<void> {
-        await (await this.getSubmitButton()).click();
-    }
-
-    // Validation Methods
-    async getErrorText(): Promise<string> {
-        return await (await this.getErrorMessage()).textContent() || '';
-    }
-
-    async getSuccessText(): Promise<string> {
-        return await (await this.getSuccessMessage()).textContent() || '';
-    }
-
-    async isErrorVisible(): Promise<boolean> {
-        return await (await this.getErrorMessage()).isVisible();
-    }
-
-    async isSuccessVisible(): Promise<boolean> {
-        return await (await this.getSuccessMessage()).isVisible();
-    }
-
-    // Utility Methods
+    // ── Utilities ─────────────────────────────────
     async waitForPageLoad(): Promise<void> {
         await this.page.waitForLoadState('networkidle');
     }
@@ -226,778 +453,582 @@ ${page.url ? `
     async isVisible(selector: string): Promise<boolean> {
         return await this.page.locator(selector).isVisible();
     }
-
-    async waitForElement(selector: string, timeout: number = 5000): Promise<void> {
-        await this.page.waitForSelector(selector, { timeout });
-    }
 }`;
-            };
+}
 
-            const generateTestFile = (page) => {
-                return `import { test, expect, Page } from '@playwright/test';
-import { ${page.name} } from '../pages/${page.name}';
+/* ─── TEST FILE GENERATOR ──────────────────────────────────────── */
+function buildTestFile(pageName, pageUrl, steps, baseUrl) {
+    const elements = buildElements(steps);
+    const navUrl = steps.find(s => s.type === 'navigate')?.selector || pageUrl;
 
-test.describe('${page.name} Tests', () => {
-    let pageObject: ${page.name};
+    const body = steps
+        .filter(s => !['navigate', 'wait', 'waitUrl'].includes(s.type) && s.selector)
+        .map(s => {
+            if (s.type === 'press') return `        // Key press: ${s.value}`;
+            const el = elements.find(e => e.selector === s.selector);
+            if (!el) return '';
+            const M = el.name.charAt(0).toUpperCase() + el.name.slice(1);
+            if (s.type === 'fill')    return `        await pageObject.fill${M}('${s.value || 'your_value'}');`;
+            if (s.type === 'select')  return `        await pageObject.select${M}('${s.value || 'option'}');`;
+            if (s.type === 'check')   return `        await pageObject.check${M}();`;
+            if (s.type === 'uncheck') return `        await pageObject.uncheck${M}();`;
+            if (s.type === 'hover')   return `        await pageObject.hover${M}();`;
+            return `        await pageObject.click${M}();`;
+        }).filter(Boolean).join('\n');
+
+    return `import { test, expect, Page } from '@playwright/test';
+import { ${pageName} } from '../pages/${pageName}';
+
+test.describe('${pageName} Tests', () => {
+    let pageObject: ${pageName};
 
     test.beforeEach(async ({ page }: { page: Page }) => {
-        // Initialize page object
-        pageObject = new ${page.name}(page);
-        
-        // Navigate to the page
-        ${page.url ? `await pageObject.navigate();` : `await page.goto('${baseUrl}');`}
-        
-        // Wait for page to be fully loaded
+        pageObject = new ${pageName}(page);
+        ${navUrl ? `await pageObject.navigate();` : `await page.goto('${baseUrl}');`}
         await pageObject.waitForPageLoad();
     });
 
-    test.afterEach(async ({ page }: { page: Page }) => {
-        // Cleanup after each test
-        console.log('Test completed, cleaning up...');
-        
-        // Optional: Take screenshot on failure
-        // if (test.info().status !== test.info().expectedStatus) {
-        //     await page.screenshot({ path: \`screenshots/\${test.info().title}.png\` });
-        // }
+    test.afterEach(async () => {
+        console.log('Test completed');
     });
 
-    test('should load ${page.name} successfully', async ({ page }: { page: Page }) => {
-        // Verify page loaded
+    test('should load ${pageName} successfully', async ({ page }: { page: Page }) => {
         await expect(page).toHaveURL(/./);
         await expect(page).toHaveTitle(/./);
     });
 
-    // TODO: Replace with your actual test scenarios
-    test('should validate form elements are visible', async ({ page }: { page: Page }) => {
-        // Verify critical elements are visible
-        const usernameInput = await pageObject.getUsernameInput();
-        await expect(usernameInput).toBeVisible();
-        
-        const passwordInput = await pageObject.getPasswordInput();
-        await expect(passwordInput).toBeVisible();
-        
-        const submitButton = await pageObject.getSubmitButton();
-        await expect(submitButton).toBeVisible();
-    });
+    test('recorded interaction flow', async ({ page }: { page: Page }) => {
+        // Auto-generated from ${steps.length} recorded steps
+${body || '        // TODO: Add your test steps here'}
 
-    test('should handle form interaction', async ({ page }: { page: Page }) => {
-        // Example: Test form submission
-        await pageObject.fillUsername('testuser@example.com');
-        await pageObject.fillPassword('SecurePass123');
-        await pageObject.clickSubmit();
-        
-        // Wait for response
         await pageObject.waitForPageLoad();
-        
-        // Add your assertions here
-        // await expect(await pageObject.isSuccessVisible()).toBeTruthy();
-    });
-
-    test('should validate input fields', async ({ page }: { page: Page }) => {
-        // Example: Test field validation
-        const usernameInput = await pageObject.getUsernameInput();
-        
-        // Test empty field
-        await usernameInput.fill('');
-        await expect(usernameInput).toBeEmpty();
-        
-        // Test with value
-        await pageObject.fillUsername('test@example.com');
-        await expect(usernameInput).toHaveValue('test@example.com');
-    });
-
-    test('should handle button states', async ({ page }: { page: Page }) => {
-        const submitButton = await pageObject.getSubmitButton();
-        
-        // Verify button is enabled
-        await expect(submitButton).toBeEnabled();
-        
-        // Add more button state tests as needed
     });
 });`;
-            };
+}
 
-            const generatePOM = () => {
-                if (pages.length === 0) {
-                    alert('Please add at least one page');
-                    return;
-                }
+/* ─── CODE VIEWER ──────────────────────────────────────────────── */
+function CodeViewer({ filename, content, onDownload }) {
+    const [copied, setCopied] = useState(false);
+    const ref = useRef(null);
+    useEffect(() => {
+        if (ref.current) { delete ref.current.dataset.highlighted; hljs.highlightElement(ref.current); }
+    }, [content, filename]);
+    const copy = () => { navigator.clipboard.writeText(content); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+    const lang = filename.endsWith('.json') ? 'json' : filename.endsWith('.ts') ? 'typescript' : 'plaintext';
+    return (
+        <div className="code-viewer">
+            <div className="code-viewer-bar">
+                <span className="code-viewer-filename">{filename}</span>
+                <div>
+                    <button className={`cv-btn cv-btn-copy ${copied ? 'copied' : ''}`} onClick={copy}>{copied ? '✓ Copied' : '📋 Copy'}</button>
+                    <button className="cv-btn cv-btn-dl" onClick={() => onDownload(filename)}>💾 Download</button>
+                </div>
+            </div>
+            <pre><code ref={ref} className={lang}>{content}</code></pre>
+        </div>
+    );
+}
 
-                const files = {};
+/* ─── CODEGEN GUIDE ─────────────────────────────────────────────── */
+function CodegenGuide({ onCodeParsed }) {
+    const [rawCode, setRawCode] = useState('');
+    const [parsed, setParsed] = useState([]);
+    const [copiedCmd, setCopiedCmd] = useState('');
+    const [siteUrl, setSiteUrl] = useState('https://demo.playwright.dev/todomvc');
 
-                pages.forEach(page => {
-                    files[`pages/${page.name}.ts`] = generateSamplePageObject(page);
-                    files[`tests/${page.name.toLowerCase()}.spec.ts`] = generateTestFile(page);
-                });
+    const cmd = `npx playwright codegen ${siteUrl}`;
 
-                // Configuration files
-                files['playwright.config.ts'] = `import { defineConfig, devices } from '@playwright/test';
+    const copyCmd = (key, text) => {
+        navigator.clipboard.writeText(text);
+        setCopiedCmd(key);
+        setTimeout(() => setCopiedCmd(''), 2000);
+    };
 
-/**
- * Playwright Test Configuration
- * Customize this file to match your testing requirements
- */
-export default defineConfig({
-    testDir: './tests',
-    
-    // Run tests in parallel
-    fullyParallel: true,
-    
-    // Fail the build on CI if test.only is used
-    forbidOnly: !!process.env.CI,
-    
-    // Retry failed tests on CI
-    retries: process.env.CI ? 2 : 0,
-    
-    // Limit workers on CI
-    workers: process.env.CI ? 1 : undefined,
-    
-    // Reporter configuration
-    reporter: [
-        ['html', { outputFolder: 'playwright-report' }],
-        ['json', { outputFile: 'test-results/results.json' }],
-        ['list']
-    ],
-    
-    // Shared settings for all tests
-    use: {
-        // Base URL for all tests
-        baseURL: '${baseUrl}',
-        
-        // Collect trace on first retry
-        trace: 'on-first-retry',
-        
-        // Screenshot on failure
-        screenshot: 'only-on-failure',
-        
-        // Video on failure
-        video: 'retain-on-failure',
-        
-        // Run in headless mode
-        headless: true,
-        
-        // Browser viewport
-        viewport: { width: 1280, height: 720 },
-        
-        // Ignore HTTPS errors
-        ignoreHTTPSErrors: true,
-        
-        // Action timeout
-        actionTimeout: 10000,
-        
-        // Navigation timeout
-        navigationTimeout: 30000,
-    },
+    const handlePaste = (val) => {
+        setRawCode(val);
+        if (val.trim()) {
+            const steps = parseCodegen(val);
+            setParsed(steps);
+        } else {
+            setParsed([]);
+        }
+    };
 
-    // Browser projects for cross-browser testing
-    projects: [
-        {
-            name: 'chromium',
-            use: { 
-                ...devices['Desktop Chrome'],
-                channel: 'chrome',
-            },
-        },
-        {
-            name: 'firefox',
-            use: { 
-                ...devices['Desktop Firefox'] 
-            },
-        },
-        {
-            name: 'webkit',
-            use: { 
-                ...devices['Desktop Safari'] 
-            },
-        },
-        
-        // Mobile browsers
-        {
-            name: 'Mobile Chrome',
-            use: { 
-                ...devices['Pixel 5'] 
-            },
-        },
-        {
-            name: 'Mobile Safari',
-            use: { 
-                ...devices['iPhone 12'] 
-            },
-        },
-    ],
+    const handleUse = () => {
+        if (!parsed.length) return alert('No steps detected. Make sure you paste the full codegen output.');
+        onCodeParsed(parsed, siteUrl);
+    };
 
-    // Optional: Web server configuration
-    // webServer: {
-    //     command: 'npm run start',
-    //     url: 'http://localhost:3000',
-    //     reuseExistingServer: !process.env.CI,
-    //     timeout: 120000,
-    // },
-});`;
+    const TYPE_COLOR = {
+        navigate:'el-nav', waitUrl:'el-nav', wait:'el-nav',
+        click:'el-click', hover:'el-click', press:'el-click',
+        fill:'el-fill', select:'el-fill', check:'el-fill', uncheck:'el-fill'
+    };
+    const TYPE_ICON = {
+        navigate:'🌐', click:'🖱️', fill:'⌨️', select:'🔽',
+        check:'☑️', uncheck:'☐', hover:'👆', press:'↵',
+        wait:'⏳', waitUrl:'🔗'
+    };
 
-                files['package.json'] = JSON.stringify({
-                    "name": "playwright-pom-framework",
-                    "version": "1.0.0",
-                    "description": "Playwright test automation framework with Page Object Model pattern",
-                    "main": "index.js",
-                    "scripts": {
-                        "test": "playwright test",
-                        "test:headed": "playwright test --headed",
-                        "test:debug": "playwright test --debug",
-                        "test:ui": "playwright test --ui",
-                        "test:chrome": "playwright test --project=chromium",
-                        "test:firefox": "playwright test --project=firefox",
-                        "test:webkit": "playwright test --project=webkit",
-                        "test:mobile": "playwright test --project='Mobile Chrome'",
-                        "test:headed:chrome": "playwright test --project=chromium --headed",
-                        "test:report": "playwright show-report",
-                        "test:codegen": "playwright codegen",
-                        "install:browsers": "playwright install"
-                    },
-                    "keywords": [
-                        "playwright",
-                        "testing",
-                        "automation",
-                        "pom",
-                        "typescript",
-                        "e2e"
-                    ],
-                    "author": "Hari Prasad MS",
-                    "license": "MIT",
-                    "devDependencies": {
-                        "@playwright/test": "^1.41.0",
-                        "@types/node": "^20.11.0",
-                        "typescript": "^5.3.0"
-                    }
-                }, null, 2);
+    // Summarise by type for the count bar
+    const typeCounts = parsed.reduce((acc, s) => { acc[s.type] = (acc[s.type]||0)+1; return acc; }, {});
+    const actionCount = parsed.filter(s => !['navigate','wait','waitUrl'].includes(s.type)).length;
 
-                files['tsconfig.json'] = JSON.stringify({
-                    "compilerOptions": {
-                        "target": "ES2020",
-                        "module": "commonjs",
-                        "lib": ["ES2020"],
-                        "strict": true,
-                        "esModuleInterop": true,
-                        "skipLibCheck": true,
-                        "forceConsistentCasingInFileNames": true,
-                        "resolveJsonModule": true,
-                        "moduleResolution": "node",
-                        "types": ["node", "@playwright/test"],
-                        "outDir": "./dist",
-                        "rootDir": "./"
-                    },
-                    "include": [
-                        "tests/**/*",
-                        "pages/**/*"
-                    ],
-                    "exclude": [
-                        "node_modules",
-                        "dist",
-                        "test-results",
-                        "playwright-report"
-                    ]
-                }, null, 2);
-
-                files['.gitignore'] = `# Dependencies
-node_modules/
-
-# Test results
-test-results/
-playwright-report/
-playwright/.cache/
-
-# Build outputs
-dist/
-
-# Environment files
-.env
-.env.local
-
-# Logs
-*.log
-npm-debug.log*
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-
-# Package lock files
-package-lock.json
-yarn.lock`;
-
-                files['README.md'] = `# Playwright POM Framework
-
-## 📋 Overview
-Generated Playwright test framework with Page Object Model pattern and TypeScript.
-
-**Base URL:** ${baseUrl}
-
-## 🚀 Quick Start
-
-### Installation
-\`\`\`bash
-# Install dependencies
-npm install
-
-# Install Playwright browsers
-npm run install:browsers
-\`\`\`
-
-### Running Tests
-\`\`\`bash
-# Run all tests
-npm test
-
-# Run in headed mode (see browser)
-npm run test:headed
-
-# Run in UI mode (interactive)
-npm run test:ui
-
-# Run specific browser
-npm run test:chrome
-npm run test:firefox
-npm run test:webkit
-
-# Run mobile tests
-npm run test:mobile
-
-# Debug mode
-npm run test:debug
-
-# View test report
-npm run test:report
-\`\`\`
-
-## 📝 Customization Guide
-
-### Step 1: Update Page Objects (\`pages/*.ts\`)
-
-Each page object contains **TODO** comments marking areas to customize:
-
-\`\`\`typescript
-// TODO: Replace these sample locators with your actual page elements
-private usernameInput = '#username';  // ← Update this
-private passwordInput = '#password';  // ← Update this
-\`\`\`
-
-**What to customize:**
-- Replace sample locators with your actual selectors
-- Add new element locators as needed
-- Update getter methods
-- Modify action methods for your use case
-- Add custom validation methods
-
-### Step 2: Update Tests (\`tests/*.spec.ts\`)
-
-Each test file includes sample tests marked with **TODO**:
-
-\`\`\`typescript
-// TODO: Replace with your actual test scenarios
-test('should handle form interaction', async ({ page }) => {
-    // Customize this test for your needs
-});
-\`\`\`
-
-**What to customize:**
-- Update test descriptions
-- Modify test data and assertions
-- Add new test cases
-- Update expected behaviors
-
-### Step 3: Configure Settings
-
-Review \`playwright.config.ts\` and adjust:
-- Browser settings
-- Timeout values
-- Screenshot/video options
-- Viewport sizes
-
-## 📁 Project Structure
-
-\`\`\`
-.
-├── pages/              # Page Object Models (customize locators here)
-├── tests/              # Test specifications (customize tests here)
-├── playwright.config.ts # Playwright configuration
-├── package.json        # NPM scripts and dependencies
-├── tsconfig.json       # TypeScript configuration
-└── README.md          # This file
-\`\`\`
-
-## 🎯 Best Practices
-
-1. **Keep page objects focused** - One page object per page
-2. **Use meaningful names** - Clear method and variable names
-3. **Add wait conditions** - Ensure stability with proper waits
-4. **Use data-testid** - When possible, use test-specific selectors
-5. **Write atomic tests** - Each test should be independent
-
-## 🔧 Troubleshooting
-
-### Tests not running?
-\`\`\`bash
-# Make sure browsers are installed
-npm run install:browsers
-\`\`\`
-
-### TypeScript errors?
-\`\`\`bash
-# Check tsconfig.json
-# Ensure @playwright/test is installed
-npm install
-\`\`\`
-
-## 📚 Resources
-
-- [Playwright Documentation](https://playwright.dev)
-- [Page Object Model Pattern](https://playwright.dev/docs/pom)
-- [TypeScript Guide](https://www.typescriptlang.org/)
-
----
-Generated by [Playwright POM Generator](https://hariprasadms.github.io/pomtestbuilder/)
-
-**Created by:** Hariprasad MS | SDER Experts Ltd
-`;
-
-                setGeneratedFiles(files);
-                setShowOutput(true);
-                setSelectedPageObject(null);
-                setSelectedTest(null);
-                setSelectedConfig(null);
-
-                setTimeout(() => {
-                    const outputElement = document.getElementById('output-section');
-                    if (outputElement) {
-                        outputElement.scrollIntoView({ behavior: 'smooth' });
-                    }
-                }, 100);
-            };
-
-            const downloadFile = (filename) => {
-                const blob = new Blob([generatedFiles[filename]], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename.split('/').pop();
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            };
-
-            const downloadAllFiles = async () => {
-                const zip = new JSZip();
-                Object.entries(generatedFiles).forEach(([name, content]) => {
-                    zip.file(name, content);
-                });
-                const blob = await zip.generateAsync({ type: 'blob' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'playwright-framework.zip';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            };
-
-            const pageObjectFiles = Object.keys(generatedFiles).filter(f => f.startsWith('pages/'));
-            const testFiles = Object.keys(generatedFiles).filter(f => f.startsWith('tests/'));
-            const configFiles = ['playwright.config.ts', 'package.json', 'tsconfig.json', 'README.md', '.gitignore'];
-
-            return (
-                <div className="min-h-screen bg-gradient-to-br from-purple-600 to-indigo-700">
-                    {/* Header */}
-                    <header className="bg-white shadow-md sticky top-0 z-50">
-                        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
-                            <div className="flex items-center gap-4">
-                                <a href="./" className="text-purple-700 hover:text-purple-900 transition font-medium">
-                                    ← Home
-                                </a>
-                                <h1 className="text-2xl font-bold text-purple-700">🎭 POM Generator</h1>
-                            </div>
-                            <nav className="flex gap-6">
-                                <a href="https://playwright.dev/docs/pom" target="_blank" rel="noopener noreferrer" className="text-purple-700 hover:text-purple-900 font-medium transition hover:underline">
-                                    📚 Docs
-                                </a>
-                                <a href="https://hariprasadms.github.io/" target="_blank" rel="noopener noreferrer" className="text-purple-700 hover:text-purple-900 font-medium transition hover:underline">
-                                    👤 About
-                                </a>
-                            </nav>
+    return (
+        <div>
+            {/* Step-by-step guide */}
+            <div className="codegen-guide">
+                <div className="codegen-step">
+                    <div className="step-num">1</div>
+                    <div className="step-content">
+                        <div className="step-title">Install Playwright (if you haven't)</div>
+                        <div className="step-desc">One-time setup in your project folder.</div>
+                        <div className="cmd-block">
+                            <span className="cmd-text">npm init playwright@latest</span>
+                            <button className={`copy-cmd-btn ${copiedCmd === 'install' ? 'ok' : ''}`} onClick={() => copyCmd('install', 'npm init playwright@latest')}>
+                                {copiedCmd === 'install' ? '✓ Copied' : 'Copy'}
+                            </button>
                         </div>
-                    </header>
+                    </div>
+                </div>
 
-                    <div className="p-6">
-                        <div className="max-w-7xl mx-auto bg-white rounded-xl shadow-2xl">
-                            <div className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white p-8 text-center">
-                                <h2 className="text-3xl font-bold mb-2">Generate Page Object Models</h2>
-                                <p className="text-purple-100">Create TypeScript page objects with sample code you can customize</p>
+                <div className="codegen-step">
+                    <div className="step-num">2</div>
+                    <div className="step-content">
+                        <div className="step-title">Enter your site URL</div>
+                        <div className="step-desc">This opens a real browser window — no iframe restrictions, no blocked sites.</div>
+                        <input
+                            value={siteUrl}
+                            onChange={e => setSiteUrl(e.target.value)}
+                            placeholder="https://your-site.com"
+                            style={{ width:'100%', padding:'9px 12px', marginTop:10, background:'rgba(0,0,0,0.35)', border:'1px solid rgba(124,58,237,0.3)', borderRadius:8, color:'#e5e7eb', fontSize:13, outline:'none', fontFamily:'JetBrains Mono, monospace' }}
+                        />
+                    </div>
+                </div>
+
+                <div className="codegen-step">
+                    <div className="step-num">3</div>
+                    <div className="step-content">
+                        <div className="step-title">Run Codegen — record your interactions</div>
+                        <div className="step-desc">A browser and an inspector panel open. Click, type, submit forms — every action is captured live.</div>
+                        <div className="cmd-block">
+                            <span className="cmd-text">{cmd}</span>
+                            <button className={`copy-cmd-btn ${copiedCmd === 'codegen' ? 'ok' : ''}`} onClick={() => copyCmd('codegen', cmd)}>
+                                {copiedCmd === 'codegen' ? '✓ Copied' : 'Copy'}
+                            </button>
+                        </div>
+                        <div style={{marginTop:12, display:'flex', gap:12, flexWrap:'wrap'}}>
+                            <div style={{flex:1, minWidth:180, background:'rgba(5,150,105,0.08)', border:'1px solid rgba(5,150,105,0.2)', borderRadius:8, padding:'10px 14px'}}>
+                                <div style={{color:'#6ee7b7', fontWeight:700, fontSize:12, marginBottom:4}}>✅ Records</div>
+                                <div style={{color:'#6b7280', fontSize:12, lineHeight:1.7}}>Clicks, form fills, navigation, key presses, selects</div>
                             </div>
-
-                            <div className="p-8">
-                                {/* Base URL */}
-                                <div className="mb-6 p-6 bg-blue-50 rounded-lg border-l-4 border-blue-600">
-                                    <h2 className="text-2xl font-semibold text-blue-700 mb-4">🌐 Application Base URL</h2>
-                                    <input
-                                        type="text"
-                                        className="w-full p-3 border-2 border-blue-300 rounded-lg focus:border-blue-600 focus:outline-none"
-                                        value={baseUrl}
-                                        onChange={(e) => setBaseUrl(e.target.value)}
-                                        placeholder="https://your-application.com"
-                                    />
-                                    <p className="text-sm text-gray-600 mt-2">This will be used in your test configuration</p>
-                                </div>
-
-                                {/* Page Configuration */}
-                                <div className="mb-6 p-6 bg-gray-50 rounded-lg border-l-4 border-purple-600">
-                                    <h2 className="text-2xl font-semibold text-purple-700 mb-4">📄 Add Pages</h2>
-                                    <div className="mb-3">
-                                        <label className="block mb-2 font-semibold text-gray-700">Page Name (must end with "Page")</label>
-                                        <input
-                                            type="text"
-                                            className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
-                                            value={pageName}
-                                            onChange={(e) => setPageName(e.target.value)}
-                                            placeholder="e.g., LoginPage, HomePage, CheckoutPage"
-                                        />
-                                    </div>
-                                    <div className="mb-3">
-                                        <label className="block mb-2 font-semibold text-gray-700">Page URL (optional)</label>
-                                        <input
-                                            type="text"
-                                            className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
-                                            value={pageUrl}
-                                            onChange={(e) => setPageUrl(e.target.value)}
-                                            placeholder="e.g., /login or https://example.com/login"
-                                        />
-                                    </div>
-                                    <button onClick={addPage} className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition shadow-lg transform hover:scale-105">
-                                        + Add Page
-                                    </button>
-                                    <div className="flex flex-wrap gap-2 mt-4">
-                                        {pages.map((p, i) => (
-                                            <span key={i} className="file-badge">
-                                                {p.name}
-                                                <span onClick={() => removePage(i)} className="cursor-pointer text-xl hover:text-red-200 transition">×</span>
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Generate Buttons */}
-                                <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border-2 border-purple-300">
-                                    <h2 className="text-2xl font-semibold text-purple-700 mb-4">⚡ Generate Framework</h2>
-                                    <div className="flex gap-3 flex-wrap">
-                                        <button onClick={generatePOM} disabled={pages.length === 0} className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-8 py-3 rounded-lg font-bold hover:from-purple-700 hover:to-purple-800 transition shadow-lg transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
-                                            🚀 Generate POM
-                                        </button>
-                                        <button onClick={() => { generatePOM(); setTimeout(downloadAllFiles, 500); }} disabled={pages.length === 0} className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-8 py-3 rounded-lg font-bold hover:from-indigo-700 hover:to-indigo-800 transition shadow-lg transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
-                                            <span className="download-icon inline-block">📦</span> Generate & Download ZIP
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Output Section */}
-                                {showOutput && (
-                                    <div id="output-section" className="mt-8">
-                                        <div className="bg-gradient-to-r from-green-100 to-green-200 border-l-4 border-green-500 text-green-800 p-4 rounded-lg mb-6 shadow-md">
-                                            ✅ Generated {Object.keys(generatedFiles).length} files successfully! Sample code included - customize for your needs.
-                                        </div>
-
-                                        {/* Main Tabs */}
-                                        <div className="flex gap-2 mb-6 border-b-2 border-gray-200 flex-wrap">
-                                            {[
-                                                { id: 'pageObjects', label: '📄 Page Objects', count: pageObjectFiles.length },
-                                                { id: 'tests', label: '🧪 Tests', count: testFiles.length },
-                                                { id: 'config', label: '⚙️ Configuration', count: configFiles.length }
-                                            ].map(tab => (
-                                                <button 
-                                                    key={tab.id} 
-                                                    onClick={() => {
-                                                        setMainTab(tab.id);
-                                                        if (tab.id === 'pageObjects') setSelectedPageObject(pageObjectFiles[0]);
-                                                        if (tab.id === 'tests') setSelectedTest(testFiles[0]);
-                                                        if (tab.id === 'config') setSelectedConfig(configFiles[0]);
-                                                    }} 
-                                                    className={`tab-button px-6 py-3 font-semibold transition ${mainTab === tab.id ? 'text-purple-700 active' : 'text-gray-600 hover:text-purple-600'}`}
-                                                >
-                                                    {tab.label} ({tab.count})
-                                                </button>
-                                            ))}
-                                        </div>
-
-                                        {/* Page Objects Tab */}
-                                        {mainTab === 'pageObjects' && (
-                                            <div>
-                                                <div className="grid md:grid-cols-4 gap-4 mb-6">
-                                                    {pageObjectFiles.map(file => (
-                                                        <button
-                                                            key={file}
-                                                            onClick={() => setSelectedPageObject(file)}
-                                                            className={`p-4 rounded-lg font-semibold text-left transition transform hover:scale-105 ${selectedPageObject === file ? 'bg-gradient-to-br from-purple-600 to-indigo-600 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                                        >
-                                                            <div className="text-2xl mb-2">📄</div>
-                                                            <div className="text-sm">{file.split('/').pop().replace('.ts', '')}</div>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                                {selectedPageObject && (
-                                                    <div className="code-card bg-white p-6 rounded-lg shadow-lg">
-                                                        <div className="flex justify-between items-center mb-4">
-                                                            <h3 className="text-xl font-bold text-purple-700">{selectedPageObject}</h3>
-                                                            <div className="flex gap-2">
-                                                                <button 
-                                                                    onClick={() => copyToClipboard(generatedFiles[selectedPageObject], selectedPageObject)}
-                                                                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition text-sm"
-                                                                >
-                                                                    {copiedFile === selectedPageObject ? '✓ Copied!' : '📋 Copy'}
-                                                                </button>
-                                                                <button 
-                                                                    onClick={() => downloadFile(selectedPageObject)} 
-                                                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
-                                                                >
-                                                                    💾 Download
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                        <div className="code-wrapper relative">
-                                                            <pre className="rounded-lg overflow-hidden">
-                                                                <code className="typescript">{generatedFiles[selectedPageObject]}</code>
-                                                            </pre>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {/* Tests Tab */}
-                                        {mainTab === 'tests' && (
-                                            <div>
-                                                <div className="grid md:grid-cols-4 gap-4 mb-6">
-                                                    {testFiles.map(file => (
-                                                        <button
-                                                            key={file}
-                                                            onClick={() => setSelectedTest(file)}
-                                                            className={`p-4 rounded-lg font-semibold text-left transition transform hover:scale-105 ${selectedTest === file ? 'bg-gradient-to-br from-green-600 to-teal-600 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                                        >
-                                                            <div className="text-2xl mb-2">🧪</div>
-                                                            <div className="text-sm">{file.split('/').pop().replace('.spec.ts', '')}</div>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                                {selectedTest && (
-                                                    <div className="code-card bg-white p-6 rounded-lg shadow-lg">
-                                                        <div className="flex justify-between items-center mb-4">
-                                                            <h3 className="text-xl font-bold text-green-700">{selectedTest}</h3>
-                                                            <div className="flex gap-2">
-                                                                <button 
-                                                                    onClick={() => copyToClipboard(generatedFiles[selectedTest], selectedTest)}
-                                                                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition text-sm"
-                                                                >
-                                                                    {copiedFile === selectedTest ? '✓ Copied!' : '📋 Copy'}
-                                                                </button>
-                                                                <button 
-                                                                    onClick={() => downloadFile(selectedTest)} 
-                                                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
-                                                                >
-                                                                    💾 Download
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                        <div className="code-wrapper relative">
-                                                            <pre className="rounded-lg overflow-hidden">
-                                                                <code className="typescript">{generatedFiles[selectedTest]}</code>
-                                                            </pre>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {/* Configuration Tab */}
-                                        {mainTab === 'config' && (
-                                            <div>
-                                                <div className="grid md:grid-cols-5 gap-4 mb-6">
-                                                    {configFiles.map(file => {
-                                                        const icons = {
-                                                            'playwright.config.ts': '⚙️',
-                                                            'package.json': '📦',
-                                                            'tsconfig.json': '🔧',
-                                                            'README.md': '📖',
-                                                            '.gitignore': '🚫'
-                                                        };
-                                                        return generatedFiles[file] && (
-                                                            <button
-                                                                key={file}
-                                                                onClick={() => setSelectedConfig(file)}
-                                                                className={`p-4 rounded-lg font-semibold text-left transition transform hover:scale-105 ${selectedConfig === file ? 'bg-gradient-to-br from-orange-600 to-red-600 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                                            >
-                                                                <div className="text-2xl mb-2">{icons[file]}</div>
-                                                                <div className="text-xs break-words">{file}</div>
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                                {selectedConfig && (
-                                                    <div className="code-card bg-white p-6 rounded-lg shadow-lg">
-                                                        <div className="flex justify-between items-center mb-4">
-                                                            <h3 className="text-xl font-bold text-orange-700">{selectedConfig}</h3>
-                                                            <div className="flex gap-2">
-                                                                <button 
-                                                                    onClick={() => copyToClipboard(generatedFiles[selectedConfig], selectedConfig)}
-                                                                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition text-sm"
-                                                                >
-                                                                    {copiedFile === selectedConfig ? '✓ Copied!' : '📋 Copy'}
-                                                                </button>
-                                                                <button 
-                                                                    onClick={() => downloadFile(selectedConfig)} 
-                                                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
-                                                                >
-                                                                    💾 Download
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                        <div className="code-wrapper relative">
-                                                            <pre className="rounded-lg overflow-hidden">
-                                                                <code className={selectedConfig.endsWith('.json') ? 'json' : selectedConfig.endsWith('.ts') ? 'typescript' : 'plaintext'}>
-                                                                    {generatedFiles[selectedConfig]}
-                                                                </code>
-                                                            </pre>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {/* Download All Section */}
-                                        <div className="mt-8 p-8 bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 rounded-lg border-2 border-purple-300 text-center">
-                                            <h3 className="text-2xl font-bold mb-4 text-purple-800">📦 Download Complete Framework</h3>
-                                            <button 
-                                                onClick={downloadAllFiles} 
-                                                className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white px-10 py-4 rounded-lg font-bold text-lg hover:from-purple-700 hover:to-indigo-800 shadow-lg transition transform hover:scale-105"
-                                            >
-                                                <span className="download-icon inline-block mr-2">📦</span>
-                                                Download ZIP Archive ({Object.keys(generatedFiles).length} files)
-                                            </button>
-                                            <p className="mt-4 text-gray-600 text-sm">
-                                                Includes: Page Objects, Tests with hooks, Config files, and README with customization guide
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
+                            <div style={{flex:1, minWidth:180, background:'rgba(59,130,246,0.08)', border:'1px solid rgba(59,130,246,0.2)', borderRadius:8, padding:'10px 14px'}}>
+                                <div style={{color:'#93c5fd', fontWeight:700, fontSize:12, marginBottom:4}}>🌐 Works With</div>
+                                <div style={{color:'#6b7280', fontSize:12, lineHeight:1.7}}>Any site — login-walled, SPAs, HTTPS, anything</div>
                             </div>
                         </div>
                     </div>
                 </div>
-            );
-        }
 
-        ReactDOM.render(<App />, document.getElementById('root'));
-    </script>
+                <div className="codegen-step">
+                    <div className="step-num">4</div>
+                    <div className="step-content">
+                        <div className="step-title">Copy &amp; paste the generated code below</div>
+                        <div className="step-desc">Select all code from the Codegen inspector panel and paste it here. POM Builder will convert it into a full Page Object Model.</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Paste area */}
+            <div style={{marginTop:20}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+                    <label style={{color:'#4b5563', fontWeight:700, fontSize:14}}>Paste Codegen Output</label>
+                    {rawCode && <button onClick={() => { setRawCode(''); setParsed([]); }} style={{background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:13}}>✕ Clear</button>}
+                </div>
+                <textarea
+                    className="codegen-paste-area"
+                    value={rawCode}
+                    onChange={e => handlePaste(e.target.value)}
+                    placeholder={`Paste your codegen output here…\n\nExample:\nimport { test, expect } from '@playwright/test';\n\ntest('test', async ({ page }) => {\n  await page.goto('https://demo.playwright.dev/todomvc');\n  await page.locator('.new-todo').fill('Buy groceries');\n  await page.locator('.new-todo').press('Enter');\n  await page.locator('.todo-list li').first().click();\n});`}
+                />
+
+                {/* Parsed preview */}
+                {parsed.length > 0 && (
+                    <div style={{marginTop:14, padding:16, background:'rgba(124,58,237,0.05)', border:'1px solid rgba(124,58,237,0.15)', borderRadius:10}}>
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12}}>
+                            <div>
+                                <span style={{fontWeight:700, fontSize:13, color:'#1f2937'}}>
+                                    ✅ {parsed.length} step{parsed.length !== 1 ? 's' : ''} detected
+                                </span>
+                                <span style={{marginLeft:10, fontSize:12, color:'#6b7280'}}>
+                                    ({actionCount} action{actionCount !== 1 ? 's' : ''} → will generate {buildElements(parsed).length} locator{buildElements(parsed).length !== 1 ? 's' : ''})
+                                </span>
+                            </div>
+                            <button
+                                onClick={handleUse}
+                                style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)', color:'white', padding:'8px 18px', borderRadius:8, fontWeight:700, fontSize:13, border:'none', cursor:'pointer', boxShadow:'0 4px 12px rgba(124,58,237,0.3)'}}>
+                                ✨ Generate POM from this
+                            </button>
+                        </div>
+                        {/* Breakdown by type */}
+                        <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:10}}>
+                            {Object.entries(typeCounts).map(([type, count]) => (
+                                <span key={type} className={`element-chip ${TYPE_COLOR[type] || 'el-click'}`}>
+                                    {TYPE_ICON[type] || '●'} {type} <strong>×{count}</strong>
+                                </span>
+                            ))}
+                        </div>
+                        {/* Individual step chips */}
+                        <details style={{cursor:'pointer'}}>
+                            <summary style={{fontSize:12, color:'#9ca3af', marginBottom:6}}>Show all steps</summary>
+                            <div style={{marginTop:6, display:'flex', flexWrap:'wrap'}}>
+                                {parsed.map((s, i) => (
+                                    <span key={i} className={`element-chip ${TYPE_COLOR[s.type] || 'el-click'}`}>
+                                        {TYPE_ICON[s.type]} {s.label ? s.label.slice(0,24) : s.selector.slice(0,24)}{(s.label||s.selector).length > 24 ? '…' : ''}
+                                        {s.value ? ` = "${s.value.slice(0,12)}${s.value.length>12?'…':''}"` : ''}
+                                    </span>
+                                ))}
+                            </div>
+                        </details>
+                    </div>
+                )}
+                {rawCode && parsed.length === 0 && (
+                    <div style={{marginTop:10, padding:'10px 14px', background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.2)', borderRadius:8, fontSize:13, color:'#b45309'}}>
+                        ⚠️ No recognisable Playwright actions found. Make sure you paste the full <code style={{fontSize:12}}>test('...', async ({'{ page }'}) =&gt; {'{ ... }'})</code> block.
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+/* ─── MAIN APP ──────────────────────────────────────────────────── */
+function App() {
+    const [pages, setPages]               = useState([]);
+    const [pageName, setPageName]         = useState('');
+    const [pageUrl, setPageUrl]           = useState('');
+    const [baseUrl, setBaseUrl]           = useState('https://demo.playwright.dev/todomvc');
+    const [mode, setMode]                 = useState('codegen'); // 'manual' | 'codegen'
+    const [generatedFiles, setGeneratedFiles] = useState({});
+    const [mainTab, setMainTab]           = useState('pages');
+    const [selectedPage, setSelectedPage] = useState(null);
+    const [selectedTest, setSelectedTest] = useState(null);
+    const [selectedConfig, setSelectedConfig] = useState(null);
+    const [showOutput, setShowOutput]     = useState(false);
+
+    const addPage = () => {
+        const n = pageName.trim();
+        if (!n) return alert('Page name is required');
+        if (!/^[A-Z][a-zA-Z0-9]*Page$/.test(n)) return alert('Name must start with capital and end with "Page" — e.g. LoginPage');
+        if (pages.find(p => p.name === n)) return alert(`"${n}" already added`);
+        setPages(p => [...p, { name: n, url: pageUrl.trim(), steps: [] }]);
+        setPageName(''); setPageUrl('');
+    };
+
+    const removePage = i => setPages(p => p.filter((_, idx) => idx !== i));
+
+    // When codegen output is parsed, build files immediately and jump to output
+    const onCodeParsed = useCallback((steps, siteUrl) => {
+        const navStep = steps.find(s => s.type === 'navigate');
+        const url = navStep?.selector || siteUrl;
+        const raw = url.split('/').filter(Boolean).pop() || 'Demo';
+        const cleaned = raw.replace(/[^a-zA-Z0-9]/g, '');
+        const name = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+        const finalName = /^[A-Z][a-zA-Z0-9]*Page$/.test(name + 'Page') ? name + 'Page' : 'RecordedPage';
+
+        // Add (or replace) the page and immediately trigger generation
+        const newPage = { name: finalName, url, steps };
+        setPages(prev => {
+            const others = prev.filter(pg => pg.name !== finalName);
+            return [...others, newPage];
+        });
+
+        // Build files right away using the new page — don't wait for state update
+        const allPages = [...pages.filter(pg => pg.name !== finalName), newPage];
+        buildFilesFromPages(allPages);
+    }, [pages, baseUrl]);
+
+    const buildFilesFromPages = useCallback((pagesArr) => {
+        if (!pagesArr.length) return alert('Add at least one page first');
+        const files = {};
+
+        pagesArr.forEach(pg => {
+            files[`pages/${pg.name}.ts`]                    = buildPageObject(pg.name, pg.url, pg.steps || []);
+            files[`tests/${pg.name.toLowerCase()}.spec.ts`] = buildTestFile(pg.name, pg.url, pg.steps || [], baseUrl);
+        });
+
+        files['playwright.config.ts'] = `import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+    testDir: './tests',
+    fullyParallel: true,
+    forbidOnly: !!process.env.CI,
+    retries: process.env.CI ? 2 : 0,
+    workers: process.env.CI ? 1 : undefined,
+    reporter: [['html'], ['list']],
+    use: {
+        baseURL: '${baseUrl}',
+        trace: 'on-first-retry',
+        screenshot: 'only-on-failure',
+        video: 'retain-on-failure',
+        headless: true,
+        viewport: { width: 1280, height: 720 },
+        ignoreHTTPSErrors: true,
+        actionTimeout: 10000,
+    },
+    projects: [
+        { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+        { name: 'firefox',  use: { ...devices['Desktop Firefox'] } },
+        { name: 'webkit',   use: { ...devices['Desktop Safari'] } },
+        { name: 'Mobile Chrome', use: { ...devices['Pixel 5'] } },
+    ],
+});`;
+
+        files['package.json'] = JSON.stringify({
+            name: 'playwright-pom-framework', version: '1.0.0',
+            scripts: { test: 'playwright test', 'test:headed': 'playwright test --headed', 'test:ui': 'playwright test --ui', report: 'playwright show-report' },
+            devDependencies: { '@playwright/test': '^1.41.0', typescript: '^5.3.0', '@types/node': '^20.0.0' }
+        }, null, 2);
+
+        files['tsconfig.json'] = JSON.stringify({
+            compilerOptions: { target: 'ES2020', module: 'commonjs', strict: true, skipLibCheck: true, types: ['node', '@playwright/test'] },
+            include: ['tests/**/*', 'pages/**/*']
+        }, null, 2);
+
+        files['.gitignore'] = `node_modules/\ntest-results/\nplaywright-report/\n.env\n*.log`;
+        files['README.md'] = `# Playwright POM Framework\n\n**Base URL:** ${baseUrl}\n\n## Setup\n\`\`\`bash\nnpm install\nnpx playwright install\n\`\`\`\n\n## Run Tests\n\`\`\`bash\nnpm test\nnpm run test:headed\nnpm run test:ui\n\`\`\`\n\nGenerated by [POM Builder](https://hariprasadms.github.io/pomtestbuilder/)`;
+
+        setGeneratedFiles(files);
+        setShowOutput(true);
+        setSelectedPage(Object.keys(files).find(f => f.startsWith('pages/')) || null);
+        setSelectedTest(Object.keys(files).find(f => f.startsWith('tests/')) || null);
+        setSelectedConfig('playwright.config.ts');
+        setMainTab('pages');
+        setTimeout(() => document.getElementById('output-section')?.scrollIntoView({ behavior: 'smooth' }), 120);
+    }, [baseUrl]);
+
+    const buildFiles = useCallback(() => {
+        if (!pages.length) return alert('Add at least one page first');
+        buildFilesFromPages(pages);
+    }, [pages, buildFilesFromPages]);
+
+    const downloadFile = filename => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([generatedFiles[filename]], { type: 'text/plain' }));
+        a.download = filename.split('/').pop(); a.click();
+    };
+
+    const downloadAll = async () => {
+        const zip = new JSZip();
+        Object.entries(generatedFiles).forEach(([n, c]) => zip.file(n, c));
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(await zip.generateAsync({ type: 'blob' }));
+        a.download = 'playwright-framework.zip'; a.click();
+    };
+
+    const pageFiles   = Object.keys(generatedFiles).filter(f => f.startsWith('pages/'));
+    const testFiles   = Object.keys(generatedFiles).filter(f => f.startsWith('tests/'));
+    const configFiles = ['playwright.config.ts', 'package.json', 'tsconfig.json', 'README.md', '.gitignore'];
+    const CONFIG_META = {
+        'playwright.config.ts': { icon:'⚙️', label:'Config'   },
+        'package.json':         { icon:'📦', label:'Package'  },
+        'tsconfig.json':        { icon:'🔧', label:'TS Config' },
+        'README.md':            { icon:'📖', label:'Readme'   },
+        '.gitignore':           { icon:'🚫', label:'Gitignore' },
+    };
+
+    return (
+        <div style={{minHeight:'100vh', background:'#f5f4fe'}}>
+            {/* Header */}
+            <header style={{background:'white', borderBottom:'1px solid rgba(124,58,237,0.1)', position:'sticky', top:0, zIndex:50, boxShadow:'0 1px 8px rgba(124,58,237,0.06)'}}>
+                <div style={{maxWidth:1100, margin:'0 auto', padding:'0 24px', display:'flex', alignItems:'center', justifyContent:'space-between', height:58}}>
+                    <div style={{display:'flex', alignItems:'center', gap:16}}>
+                        <a href="./" style={{color:'#7c3aed', fontWeight:600, fontSize:14, textDecoration:'none'}}>← Home</a>
+                        <div style={{width:1, height:20, background:'#ede9ff'}} />
+                        <span style={{fontWeight:800, fontSize:19, color:'#1f2937'}}>🏗️ Playwright POM Builder</span>
+                    </div>
+                    <a href="https://playwright.dev/docs/pom" target="_blank" style={{color:'#6b7280', fontSize:14, fontWeight:500, textDecoration:'none'}}>📚 Docs</a>
+                </div>
+            </header>
+
+            <div style={{maxWidth:1100, margin:'0 auto', padding:'28px 24px'}}>
+                {/* Hero */}
+                <div style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)', borderRadius:16, padding:'28px 36px', marginBottom:24, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:16, boxShadow:'0 8px 30px rgba(124,58,237,0.3)'}}>
+                    <div>
+                        <h1 style={{color:'white', fontSize:26, fontWeight:800, margin:0}}>Generate Page Object Models</h1>
+                        <p style={{color:'rgba(255,255,255,0.7)', margin:'6px 0 0', fontSize:14}}>Use Playwright Codegen to record interactions, then generate a full POM framework instantly.</p>
+                    </div>
+                    <a href="https://playwright.dev/docs/codegen" target="_blank"
+                        style={{background:'rgba(255,255,255,0.15)', border:'1px solid rgba(255,255,255,0.25)', color:'white', padding:'10px 20px', borderRadius:10, fontWeight:700, fontSize:14, textDecoration:'none', backdropFilter:'blur(4px)'}}>
+                        📘 Codegen Docs ↗
+                    </a>
+                </div>
+
+                {/* Base URL */}
+                <div className="section-card">
+                    <div className="section-body" style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, alignItems:'end'}}>
+                        <div>
+                            <label className="pom-label">🌐 Application Base URL</label>
+                            <input className="pom-input" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="https://your-app.com" />
+                        </div>
+                        <p style={{margin:0, fontSize:12, color:'#9ca3af'}}>Used as <code style={{fontSize:11, background:'#f3f4f6', padding:'1px 5px', borderRadius:4}}>baseURL</code> in <code style={{fontSize:11, background:'#f3f4f6', padding:'1px 5px', borderRadius:4}}>playwright.config.ts</code></p>
+                    </div>
+                </div>
+
+                {/* Mode toggle + content */}
+                <div className="section-card">
+                    <div className="section-body">
+                        <div className="mode-toggle" style={{marginBottom:24}}>
+                            <button className={`mode-btn ${mode === 'codegen' ? 'active' : ''}`} onClick={() => setMode('codegen')}>
+                                🎬 Record with Codegen
+                            </button>
+                            <button className={`mode-btn ${mode === 'manual' ? 'active' : ''}`} onClick={() => setMode('manual')}>
+                                ✏️ Add Pages Manually
+                            </button>
+                        </div>
+
+                        {mode === 'codegen' && <CodegenGuide onCodeParsed={onCodeParsed} />}
+
+                        {mode === 'manual' && (
+                            <div>
+                                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:12, alignItems:'flex-end', marginBottom:16}}>
+                                    <div>
+                                        <label className="pom-label">Page Name</label>
+                                        <input className="pom-input" value={pageName} onChange={e => setPageName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPage()} placeholder="LoginPage, DashboardPage…" />
+                                    </div>
+                                    <div>
+                                        <label className="pom-label">Page URL <span style={{fontWeight:400, color:'#9ca3af'}}>(optional)</span></label>
+                                        <input className="pom-input" value={pageUrl} onChange={e => setPageUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPage()} placeholder="/login" />
+                                    </div>
+                                    <button className="btn-primary" onClick={addPage} style={{height:44}}>+ Add</button>
+                                </div>
+                                <p style={{color:'#9ca3af', fontSize:12, margin:'0 0 14px'}}>Page objects will be generated with sample code for you to customise.</p>
+                            </div>
+                        )}
+
+                        {/* Pages list always visible */}
+                        {pages.length > 0 && (
+                            <div style={{marginTop: mode === 'manual' ? 0 : 20, paddingTop: mode === 'manual' ? 16 : 0, borderTop: mode === 'manual' ? '1px solid #f0eef8' : 'none'}}>
+                                <div style={{fontSize:13, fontWeight:600, color:'#6b7280', marginBottom:10}}>Pages queued for generation:</div>
+                                <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
+                                    {pages.map((p, i) => (
+                                        <div key={i} className="page-pill">
+                                            {p.steps?.length > 0 && (
+                                                <span style={{background:'rgba(255,255,255,0.2)', borderRadius:10, padding:'1px 7px', fontSize:11}}>{p.steps.length} steps</span>
+                                            )}
+                                            {p.name}
+                                            <span onClick={() => removePage(i)} style={{cursor:'pointer', opacity:0.7, fontSize:16}}>×</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {pages.length === 0 && mode === 'manual' && (
+                            <div style={{textAlign:'center', padding:'24px', color:'#9ca3af', fontSize:13, border:'2px dashed #ede9ff', borderRadius:10}}>
+                                No pages yet. Add one above or <button onClick={() => setMode('codegen')} style={{color:'#7c3aed', background:'none', border:'none', cursor:'pointer', fontWeight:600, padding:0}}>use Codegen</button> to record.
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Generate buttons */}
+                <div style={{display:'flex', gap:12, marginBottom:28, flexWrap:'wrap'}}>
+                    <button className="btn-primary" onClick={buildFiles} disabled={!pages.length} style={{fontSize:15, padding:'13px 28px'}}>
+                        🚀 Generate POM Framework
+                    </button>
+                    <button className="btn-secondary" disabled={!pages.length} onClick={() => { buildFiles(); setTimeout(downloadAll, 600); }} style={{fontSize:15, padding:'13px 28px'}}>
+                        📦 Generate &amp; Download ZIP
+                    </button>
+                </div>
+
+                {/* Output */}
+                {showOutput && (
+                    <div id="output-section">
+                        <div className="success-banner">
+                            <span style={{fontSize:22}}>✅</span>
+                            <div>
+                                <strong style={{color:'#065f46', fontSize:15}}>Framework generated!</strong>
+                                <span style={{color:'#6b7280', fontSize:13, marginLeft:10}}>{Object.keys(generatedFiles).length} files ready</span>
+                            </div>
+                            <button onClick={downloadAll} style={{marginLeft:'auto', background:'linear-gradient(135deg,#059669,#047857)', color:'white', padding:'9px 22px', borderRadius:8, fontWeight:700, fontSize:13, border:'none', cursor:'pointer', boxShadow:'0 4px 10px rgba(5,150,105,0.3)'}}>
+                                📦 Download All ZIP
+                            </button>
+                        </div>
+
+                        <div className="output-tabs">
+                            {[
+                                { id:'pages',  label:'📄 Page Objects', count: pageFiles.length  },
+                                { id:'tests',  label:'🧪 Tests',        count: testFiles.length  },
+                                { id:'config', label:'⚙️ Config',       count: configFiles.length },
+                            ].map(t => (
+                                <button key={t.id} className={`output-tab ${mainTab === t.id ? 'active' : ''}`} onClick={() => setMainTab(t.id)}>
+                                    {t.label}
+                                    <span className="tab-count" style={{background: mainTab===t.id ? 'rgba(124,58,237,0.1)' : '#f3f4f6', color: mainTab===t.id ? '#7c3aed' : '#9ca3af'}}>
+                                        {t.count}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+
+                        {mainTab === 'pages' && (
+                            <>
+                                <div className="file-grid">
+                                    {pageFiles.map(f => (
+                                        <div key={f} className={`file-card ${selectedPage===f ? 'active' : ''}`} onClick={() => setSelectedPage(f)}>
+                                            <div className="file-card-icon">📄</div>
+                                            <div className="file-card-name">{f.split('/').pop().replace('.ts','')}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                                {selectedPage && generatedFiles[selectedPage] && (
+                                    <CodeViewer filename={selectedPage} content={generatedFiles[selectedPage]} onDownload={downloadFile} />
+                                )}
+                            </>
+                        )}
+
+                        {mainTab === 'tests' && (
+                            <>
+                                <div className="file-grid">
+                                    {testFiles.map(f => (
+                                        <div key={f} className={`file-card ${selectedTest===f ? 'active' : ''}`} onClick={() => setSelectedTest(f)}>
+                                            <div className="file-card-icon">🧪</div>
+                                            <div className="file-card-name">{f.split('/').pop().replace('.spec.ts','')}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                                {selectedTest && generatedFiles[selectedTest] && (
+                                    <CodeViewer filename={selectedTest} content={generatedFiles[selectedTest]} onDownload={downloadFile} />
+                                )}
+                            </>
+                        )}
+
+                        {mainTab === 'config' && (
+                            <>
+                                <div className="file-grid">
+                                    {configFiles.filter(f => generatedFiles[f]).map(f => {
+                                        const m = CONFIG_META[f] || { icon:'📄', label: f };
+                                        return (
+                                            <div key={f} className={`file-card ${selectedConfig===f ? 'active' : ''}`} onClick={() => setSelectedConfig(f)}>
+                                                <div className="file-card-icon">{m.icon}</div>
+                                                <div className="file-card-name">{m.label}</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                {selectedConfig && generatedFiles[selectedConfig] && (
+                                    <CodeViewer filename={selectedConfig} content={generatedFiles[selectedConfig]} onDownload={downloadFile} />
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
 </body>
 </html>
