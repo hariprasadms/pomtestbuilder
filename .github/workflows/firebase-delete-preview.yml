@@ -1,0 +1,28 @@
+# .github/workflows/firebase-delete-preview.yml
+name: Delete Preview Deployments
+
+on:
+  pull_request:
+    types:
+      - closed
+
+jobs:
+  delete_preview:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Firebase CLI setup
+      uses: FirebaseExtended/action-hosting-deploy@v0
+      with:
+        repoToken: "${{ secrets.GITHUB_TOKEN }}"
+        firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
+    
+    - name: Delete Preview Channel
+      run: |
+        branch_name=${GITHUB_REF##*/}
+        channel_id="pr-${branch_name}"
+        firebase hosting:channel:delete ${channel_id} --project your-project-id --force
