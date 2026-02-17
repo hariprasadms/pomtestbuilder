@@ -210,6 +210,54 @@
             border: 1px solid rgba(5,150,105,0.2); border-radius: 12px;
             padding: 16px 20px; display: flex; align-items: center; gap: 14px; margin-bottom: 24px;
         }
+
+        /* ── SESSION RESTORE BANNER ── */
+        .restore-banner {
+            background: linear-gradient(135deg, rgba(124,58,237,0.06), rgba(79,70,229,0.08));
+            border: 1px solid rgba(124,58,237,0.18); border-radius: 12px;
+            padding: 14px 20px; display: flex; align-items: center; gap: 14px;
+            margin-bottom: 20px; animation: fadeSlideIn 0.35s ease;
+        }
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── RENAME MODAL ── */
+        .rename-backdrop {
+            position: fixed; inset: 0; z-index: 998;
+            background: rgba(10,5,30,0.55); backdrop-filter: blur(5px);
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.2s;
+        }
+        .rename-backdrop.open { opacity: 1; pointer-events: all; }
+        .rename-modal {
+            background: white; border-radius: 16px; padding: 32px 28px;
+            width: 440px; max-width: 92vw;
+            box-shadow: 0 24px 60px rgba(124,58,237,0.22), 0 0 0 1px rgba(124,58,237,0.1);
+            transform: translateY(12px) scale(0.97); transition: transform 0.2s;
+            position: relative;
+        }
+        .rename-backdrop.open .rename-modal { transform: translateY(0) scale(1); }
+
+        /* ── PAGE PILL EDITABLE ── */
+        .page-pill-wrap {
+            display: inline-flex; align-items: center; gap: 0;
+            background: linear-gradient(135deg,#7c3aed,#4f46e5);
+            border-radius: 999px; box-shadow: 0 4px 12px rgba(124,58,237,0.3);
+            overflow: hidden;
+        }
+        .page-pill-inner {
+            color: white; padding: 6px 14px;
+            font-weight: 600; font-size: 13px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .page-pill-edit {
+            background: rgba(255,255,255,0.15); border: none; color: white;
+            padding: 6px 10px; cursor: pointer; font-size: 13px;
+            transition: background 0.15s; border-left: 1px solid rgba(255,255,255,0.15);
+        }
+        .page-pill-edit:hover { background: rgba(255,255,255,0.28); }
     </style>
 </head>
 <body>
@@ -393,6 +441,60 @@ function buildElements(steps) {
     return Object.values(bySelector);
 }
 
+/* ─── BASE PAGE GENERATOR ───────────────────────────────────────── */
+function buildBasePage() {
+    return `import { Page, Locator } from '@playwright/test';
+
+/**
+ * BasePage — shared utilities inherited by every Page Object.
+ * All page classes extend this instead of declaring utilities inline.
+ */
+export abstract class BasePage {
+    readonly page: Page;
+
+    constructor(page: Page) {
+        this.page = page;
+    }
+
+    /** Navigate to a URL (override in subclass for page-specific navigation). */
+    async navigate(url: string): Promise<void> {
+        await this.page.goto(url);
+    }
+
+    /** Wait for network to be idle before interacting. */
+    async waitForPageLoad(): Promise<void> {
+        await this.page.waitForLoadState('networkidle');
+    }
+
+    /** Check if a locator is visible on the page. */
+    async isVisible(selector: string): Promise<boolean> {
+        return this.page.locator(selector).isVisible();
+    }
+
+    /** Wait for an element to be visible. */
+    async waitForElement(selector: string, timeout = 10000): Promise<Locator> {
+        const loc = this.page.locator(selector);
+        await loc.waitFor({ state: 'visible', timeout });
+        return loc;
+    }
+
+    /** Scroll an element into view. */
+    async scrollTo(selector: string): Promise<void> {
+        await this.page.locator(selector).scrollIntoViewIfNeeded();
+    }
+
+    /** Get visible text content from a locator. */
+    async getText(selector: string): Promise<string> {
+        return (await this.page.locator(selector).textContent()) ?? '';
+    }
+
+    /** Take a named screenshot (saved to test-results/). */
+    async takeScreenshot(name: string): Promise<void> {
+        await this.page.screenshot({ path: \`test-results/\${name}.png\`, fullPage: true });
+    }
+}`;
+}
+
 /* ─── PAGE OBJECT GENERATOR ────────────────────────────────────── */
 function buildPageObject(pageName, pageUrl, steps) {
     const elements = buildElements(steps);
@@ -419,24 +521,19 @@ function buildPageObject(pageName, pageUrl, steps) {
             return `    async uncheck${M}(): Promise<void> {\n        await this.page.uncheck(this.${e.name});\n    }`;
         if (e.type === 'hover')
             return `    async hover${M}(): Promise<void> {\n        await (await this.get${M}()).hover();\n    }`;
-        // default → click
         return `    async click${M}(): Promise<void> {\n        await (await this.get${M}()).click();\n    }`;
     }).join('\n\n');
 
-    return `import { Page, Locator } from '@playwright/test';
+    return `import { Locator } from '@playwright/test';
+import { BasePage } from './BasePage';
 
-export class ${pageName} {
-    readonly page: Page;
+export class ${pageName} extends BasePage {
 
     // ── Locators ──────────────────────────────────
 ${decl}
-
-    constructor(page: Page) {
-        this.page = page;
-    }
 ${navUrl ? `
     async navigate(): Promise<void> {
-        await this.page.goto('${navUrl}');
+        await super.navigate('${navUrl}');
     }
 ` : ''}
     // ── Getters ───────────────────────────────────
@@ -444,15 +541,6 @@ ${getters || '    // no elements detected — paste codegen output and try again
 
     // ── Actions ───────────────────────────────────
 ${actions || '    // no elements detected — paste codegen output and try again'}
-
-    // ── Utilities ─────────────────────────────────
-    async waitForPageLoad(): Promise<void> {
-        await this.page.waitForLoadState('networkidle');
-    }
-
-    async isVisible(selector: string): Promise<boolean> {
-        return await this.page.locator(selector).isVisible();
-    }
 }`;
 }
 
@@ -703,19 +791,93 @@ function CodegenGuide({ onCodeParsed }) {
 }
 
 /* ─── MAIN APP ──────────────────────────────────────────────────── */
-function App() {
-    const [pages, setPages]               = useState([]);
-    const [pageName, setPageName]         = useState('');
-    const [pageUrl, setPageUrl]           = useState('');
-    const [baseUrl, setBaseUrl]           = useState('https://demo.playwright.dev/todomvc');
-    const [mode, setMode]                 = useState('codegen'); // 'manual' | 'codegen'
-    const [generatedFiles, setGeneratedFiles] = useState({});
-    const [mainTab, setMainTab]           = useState('pages');
-    const [selectedPage, setSelectedPage] = useState(null);
-    const [selectedTest, setSelectedTest] = useState(null);
-    const [selectedConfig, setSelectedConfig] = useState(null);
-    const [showOutput, setShowOutput]     = useState(false);
 
+const SESSION_KEY = 'pom_builder_session_v1';
+
+function saveSession(pages, baseUrl) {
+    try {
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ pages, baseUrl, savedAt: Date.now() }));
+    } catch(e) {}
+}
+
+function loadSession() {
+    try {
+        const raw = localStorage.getItem(SESSION_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch(e) { return null; }
+}
+
+function clearSession() {
+    try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+}
+
+function App() {
+    const [pages, setPages]                   = useState([]);
+    const [pageName, setPageName]             = useState('');
+    const [pageUrl, setPageUrl]               = useState('');
+    const [baseUrl, setBaseUrl]               = useState('https://demo.playwright.dev/todomvc');
+    const [mode, setMode]                     = useState('codegen');
+    const [generatedFiles, setGeneratedFiles] = useState({});
+    const [mainTab, setMainTab]               = useState('pages');
+    const [selectedPage, setSelectedPage]     = useState(null);
+    const [selectedTest, setSelectedTest]     = useState(null);
+    const [selectedConfig, setSelectedConfig] = useState(null);
+    const [showOutput, setShowOutput]         = useState(false);
+
+    // ── Session restore ──────────────────────────────────────────
+    const [pendingSession, setPendingSession] = useState(null);   // session waiting for user accept
+    const [sessionRestored, setSessionRestored] = useState(false);
+
+    useEffect(() => {
+        const s = loadSession();
+        if (s && s.pages && s.pages.length > 0) setPendingSession(s);
+    }, []);
+
+    const acceptRestore = () => {
+        setPages(pendingSession.pages);
+        setBaseUrl(pendingSession.baseUrl || baseUrl);
+        setPendingSession(null);
+        setSessionRestored(true);
+        setTimeout(() => setSessionRestored(false), 3000);
+    };
+    const dismissRestore = () => {
+        clearSession();
+        setPendingSession(null);
+    };
+
+    // Auto-save on every change
+    useEffect(() => {
+        if (pages.length > 0) saveSession(pages, baseUrl);
+    }, [pages, baseUrl]);
+
+    // ── Rename modal ─────────────────────────────────────────────
+    const [renameTarget, setRenameTarget]   = useState(null);   // { index, currentName }
+    const [renameValue, setRenameValue]     = useState('');
+    const [renameError, setRenameError]     = useState('');
+
+    const openRename = (i) => {
+        setRenameTarget({ index: i, currentName: pages[i].name });
+        setRenameValue(pages[i].name);
+        setRenameError('');
+    };
+    const closeRename = () => { setRenameTarget(null); setRenameError(''); };
+
+    const commitRename = () => {
+        const n = renameValue.trim();
+        if (!n) { setRenameError('Name cannot be empty.'); return; }
+        if (!/^[A-Z][a-zA-Z0-9]*Page$/.test(n)) {
+            setRenameError('Must start with a capital letter and end with "Page" — e.g. LoginPage');
+            return;
+        }
+        if (pages.find((p, i) => p.name === n && i !== renameTarget.index)) {
+            setRenameError(`"${n}" is already used by another page.`);
+            return;
+        }
+        setPages(prev => prev.map((p, i) => i === renameTarget.index ? { ...p, name: n } : p));
+        closeRename();
+    };
+
+    // ── Page management ──────────────────────────────────────────
     const addPage = () => {
         const n = pageName.trim();
         if (!n) return alert('Page name is required');
@@ -727,7 +889,7 @@ function App() {
 
     const removePage = i => setPages(p => p.filter((_, idx) => idx !== i));
 
-    // When codegen output is parsed, build files immediately and jump to output
+    // ── Codegen callback ─────────────────────────────────────────
     const onCodeParsed = useCallback((steps, siteUrl) => {
         const navStep = steps.find(s => s.type === 'navigate');
         const url = navStep?.selector || siteUrl;
@@ -735,29 +897,31 @@ function App() {
         const cleaned = raw.replace(/[^a-zA-Z0-9]/g, '');
         const name = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
         const finalName = /^[A-Z][a-zA-Z0-9]*Page$/.test(name + 'Page') ? name + 'Page' : 'RecordedPage';
-
-        // Add (or replace) the page and immediately trigger generation
         const newPage = { name: finalName, url, steps };
         setPages(prev => {
             const others = prev.filter(pg => pg.name !== finalName);
             return [...others, newPage];
         });
-
-        // Build files right away using the new page — don't wait for state update
         const allPages = [...pages.filter(pg => pg.name !== finalName), newPage];
         buildFilesFromPages(allPages);
     }, [pages, baseUrl]);
 
+    // ── File generation ──────────────────────────────────────────
     const buildFilesFromPages = useCallback((pagesArr) => {
         if (!pagesArr.length) return alert('Add at least one page first');
         const files = {};
 
+        // BasePage — shared base class
+        files['pages/BasePage.ts'] = buildBasePage();
+
         pagesArr.forEach(pg => {
-            files[`pages/${pg.name}.ts`]                    = buildPageObject(pg.name, pg.url, pg.steps || []);
-            files[`tests/${pg.name.toLowerCase()}.spec.ts`] = buildTestFile(pg.name, pg.url, pg.steps || [], baseUrl);
+            files[`pages/${pg.name}.ts`]                     = buildPageObject(pg.name, pg.url, pg.steps || []);
+            files[`tests/${pg.name.toLowerCase()}.spec.ts`]  = buildTestFile(pg.name, pg.url, pg.steps || [], baseUrl);
         });
 
         files['playwright.config.ts'] = `import { defineConfig, devices } from '@playwright/test';
+import dotenv from 'dotenv';
+dotenv.config();
 
 export default defineConfig({
     testDir: './tests',
@@ -767,7 +931,7 @@ export default defineConfig({
     workers: process.env.CI ? 1 : undefined,
     reporter: [['html'], ['list']],
     use: {
-        baseURL: '${baseUrl}',
+        baseURL: process.env.BASE_URL || '${baseUrl}',
         trace: 'on-first-retry',
         screenshot: 'only-on-failure',
         video: 'retain-on-failure',
@@ -797,7 +961,8 @@ export default defineConfig({
             devDependencies: {
                 '@playwright/test': '^1.49.0',
                 'typescript':       '^5.3.0',
-                '@types/node':      '^20.0.0'
+                '@types/node':      '^20.0.0',
+                'dotenv':           '^16.4.0'
             }
         }, null, 2);
 
@@ -815,36 +980,117 @@ export default defineConfig({
             exclude: ['node_modules', 'dist', 'tests', 'playwright.config.ts']
         }, null, 2);
 
-        files['.gitignore'] = `node_modules/\ntest-results/\nplaywright-report/\n.env\n*.log`;
-        files['README.md'] = `# Playwright POM Framework
+        // .env + .env.example
+        files['.env'] = `# Application under test — override per environment
+BASE_URL=${baseUrl}
+`;
+        files['.env.example'] = `# Copy this file to .env and fill in your values
+BASE_URL=https://your-app.com
+`;
 
-**Base URL:** ${baseUrl}
+        // GitHub Actions CI
+        files['.github/workflows/playwright.yml'] = `name: Playwright Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run Playwright tests
+        run: npm test
+        env:
+          CI: true
+          BASE_URL: \${{ secrets.BASE_URL || '${baseUrl}' }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+`;
+
+        files['.gitignore'] = `node_modules/\ntest-results/\nplaywright-report/\ndist/\n.env\n*.log`;
+
+        const pageList = pagesArr.map(p => `│   ├── ${p.name}.ts`).join('\n');
+        const testList = pagesArr.map(p => `│   └── ${p.name.toLowerCase()}.spec.ts`).join('\n');
+        files['README.md'] = `# Playwright Page Object Models Framework
+
+[![Playwright Tests](https://github.com/{owner}/{repo}/actions/workflows/playwright.yml/badge.svg)](https://github.com/{owner}/{repo}/actions/workflows/playwright.yml)
+
+> Generated by [Page Object Models Builder](https://hariprasadms.github.io/pomtestbuilder/)
 
 ## Setup
+
 \`\`\`bash
 npm install
 npx playwright install
+cp .env.example .env   # add your BASE_URL
 \`\`\`
 
 ## Run Tests
+
 \`\`\`bash
-npm test                  # run all tests (headless)
-npm run test:headed       # run with browser visible
-npm run test:ui           # open Playwright UI mode
-npm run test:debug        # step through tests
-npm run test:report       # open last HTML report
+npm test                  # headless (all browsers)
+npm run test:headed       # visible browser
+npm run test:ui           # Playwright UI mode
+npm run test:debug        # step-through debugger
+npm run test:report       # open HTML report
 \`\`\`
 
 ## Project Structure
+
 \`\`\`
-├── pages/          # Page Object Models
-├── tests/          # Spec files
+├── pages/
+│   ├── BasePage.ts      ← shared utilities
+${pageList}
+├── tests/
+${testList}
+├── .github/
+│   └── workflows/
+│       └── playwright.yml
 ├── playwright.config.ts
 ├── tsconfig.json
+├── .env                 ← BASE_URL (gitignored)
 └── package.json
 \`\`\`
 
-Generated by [POM Builder](https://hariprasadms.github.io/pomtestbuilder/)`;
+## Environment Variables
+
+| Variable   | Description              | Default |
+|-----------|--------------------------|---------|
+| \`BASE_URL\` | Application URL under test | \`${baseUrl}\` |
+
+## Architecture
+
+Each page class **extends \`BasePage\`** which provides shared utilities:
+- \`waitForPageLoad()\` — waits for network idle
+- \`isVisible(selector)\` — boolean visibility check
+- \`waitForElement(selector)\` — waits with timeout
+- \`scrollTo(selector)\` — scrolls element into view
+- \`getText(selector)\` — returns text content
+- \`takeScreenshot(name)\` — saves full-page screenshot
+`;
 
         setGeneratedFiles(files);
         setShowOutput(true);
@@ -876,17 +1122,57 @@ Generated by [POM Builder](https://hariprasadms.github.io/pomtestbuilder/)`;
 
     const pageFiles   = Object.keys(generatedFiles).filter(f => f.startsWith('pages/'));
     const testFiles   = Object.keys(generatedFiles).filter(f => f.startsWith('tests/'));
-    const configFiles = ['playwright.config.ts', 'package.json', 'tsconfig.json', 'README.md', '.gitignore'];
+    const configFiles = ['playwright.config.ts', 'package.json', 'tsconfig.json', 'README.md', '.gitignore', '.env', '.env.example', '.github/workflows/playwright.yml'];
     const CONFIG_META = {
-        'playwright.config.ts': { icon:'⚙️', label:'Config'   },
-        'package.json':         { icon:'📦', label:'Package'  },
-        'tsconfig.json':        { icon:'🔧', label:'TS Config' },
-        'README.md':            { icon:'📖', label:'Readme'   },
-        '.gitignore':           { icon:'🚫', label:'Gitignore' },
+        'playwright.config.ts':              { icon:'⚙️',  label:'Config'     },
+        'package.json':                      { icon:'📦',  label:'Package'    },
+        'tsconfig.json':                     { icon:'🔧',  label:'TS Config'  },
+        'README.md':                         { icon:'📖',  label:'Readme'     },
+        '.gitignore':                        { icon:'🚫',  label:'Gitignore'  },
+        '.env':                              { icon:'🔑',  label:'.env'       },
+        '.env.example':                      { icon:'📋',  label:'.env.example'},
+        '.github/workflows/playwright.yml':  { icon:'🤖',  label:'CI (GitHub)'},
     };
 
     return (
         <div style={{minHeight:'100vh', background:'#f5f4fe'}}>
+
+            {/* ── RENAME MODAL ─────────────────────────────── */}
+            <div className={`rename-backdrop ${renameTarget ? 'open' : ''}`}
+                 onClick={e => { if (e.target === e.currentTarget) closeRename(); }}>
+                <div className="rename-modal">
+                    <div style={{fontWeight:800, fontSize:17, color:'#1f2937', marginBottom:6}}>✏️ Rename Page</div>
+                    <div style={{fontSize:13, color:'#6b7280', marginBottom:18}}>
+                        Renaming propagates to the page class, test file, and all imports.
+                    </div>
+                    <label style={{display:'block', fontWeight:600, fontSize:12, color:'#4b5563', marginBottom:6}}>New Page Name</label>
+                    <input
+                        className="pom-input"
+                        value={renameValue}
+                        autoFocus
+                        onChange={e => { setRenameValue(e.target.value); setRenameError(''); }}
+                        onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') closeRename(); }}
+                        placeholder="LoginPage, DashboardPage…"
+                        style={{marginBottom: renameError ? 6 : 18}}
+                    />
+                    {renameError && (
+                        <div style={{fontSize:12, color:'#dc2626', marginBottom:14, display:'flex', alignItems:'center', gap:5}}>
+                            ⚠️ {renameError}
+                        </div>
+                    )}
+                    <div style={{display:'flex', gap:10, justifyContent:'flex-end'}}>
+                        <button onClick={closeRename}
+                            style={{padding:'9px 20px', borderRadius:9, border:'2px solid #ede9ff', background:'white', color:'#6b7280', fontWeight:600, cursor:'pointer', fontSize:14}}>
+                            Cancel
+                        </button>
+                        <button onClick={commitRename}
+                            style={{padding:'9px 22px', borderRadius:9, border:'none', background:'linear-gradient(135deg,#7c3aed,#4f46e5)', color:'white', fontWeight:700, cursor:'pointer', fontSize:14, boxShadow:'0 4px 12px rgba(124,58,237,0.3)'}}>
+                            ✓ Rename
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             {/* Header */}
             <header style={{background:'white', borderBottom:'1px solid rgba(124,58,237,0.1)', position:'sticky', top:0, zIndex:50, boxShadow:'0 1px 8px rgba(124,58,237,0.06)'}}>
                 <div style={{maxWidth:1100, margin:'0 auto', padding:'0 24px', display:'flex', alignItems:'center', justifyContent:'space-between', height:62}}>
@@ -907,6 +1193,40 @@ Generated by [POM Builder](https://hariprasadms.github.io/pomtestbuilder/)`;
             </header>
 
             <div style={{maxWidth:1100, margin:'0 auto', padding:'28px 24px'}}>
+
+                {/* ── SESSION RESTORE BANNER ───────────────── */}
+                {pendingSession && (
+                    <div className="restore-banner">
+                        <span style={{fontSize:22}}>💾</span>
+                        <div style={{flex:1}}>
+                            <div style={{fontWeight:700, fontSize:14, color:'#1f2937'}}>
+                                Restore previous session?
+                            </div>
+                            <div style={{fontSize:12, color:'#6b7280', marginTop:2}}>
+                                {pendingSession.pages.length} page{pendingSession.pages.length !== 1 ? 's' : ''} saved
+                                {' · '}
+                                {new Date(pendingSession.savedAt).toLocaleString()}
+                                {' · '}
+                                {pendingSession.pages.map(p => p.name).join(', ')}
+                            </div>
+                        </div>
+                        <button onClick={acceptRestore}
+                            style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)', color:'white', border:'none', padding:'8px 18px', borderRadius:8, fontWeight:700, fontSize:13, cursor:'pointer'}}>
+                            ✓ Restore
+                        </button>
+                        <button onClick={dismissRestore}
+                            style={{background:'none', border:'2px solid rgba(124,58,237,0.2)', color:'#7c3aed', padding:'8px 14px', borderRadius:8, fontWeight:600, fontSize:13, cursor:'pointer'}}>
+                            Discard
+                        </button>
+                    </div>
+                )}
+
+                {sessionRestored && (
+                    <div style={{background:'rgba(5,150,105,0.07)', border:'1px solid rgba(5,150,105,0.2)', borderRadius:10, padding:'11px 18px', marginBottom:16, fontSize:13, color:'#065f46', display:'flex', alignItems:'center', gap:8, animation:'fadeSlideIn 0.3s ease'}}>
+                        ✅ Session restored — {pages.length} page{pages.length !== 1 ? 's' : ''} loaded
+                    </div>
+                )}
+
                 {/* Hero */}
                 <div style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)', borderRadius:16, padding:'28px 36px', marginBottom:24, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:16, boxShadow:'0 8px 30px rgba(124,58,237,0.3)'}}>
                     <div>
@@ -934,7 +1254,11 @@ Generated by [POM Builder](https://hariprasadms.github.io/pomtestbuilder/)`;
                             <label className="pom-label">🌐 Application Base URL</label>
                             <input className="pom-input" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="https://your-app.com" />
                         </div>
-                        <p style={{margin:0, fontSize:12, color:'#9ca3af'}}>Used as <code style={{fontSize:11, background:'#f3f4f6', padding:'1px 5px', borderRadius:4}}>baseURL</code> in <code style={{fontSize:11, background:'#f3f4f6', padding:'1px 5px', borderRadius:4}}>playwright.config.ts</code></p>
+                        <p style={{margin:0, fontSize:12, color:'#9ca3af'}}>
+                            Saved to <code style={{fontSize:11, background:'#f3f4f6', padding:'1px 5px', borderRadius:4}}>.env</code> as{' '}
+                            <code style={{fontSize:11, background:'#f3f4f6', padding:'1px 5px', borderRadius:4}}>BASE_URL</code>{' '}
+                            and read by <code style={{fontSize:11, background:'#f3f4f6', padding:'1px 5px', borderRadius:4}}>playwright.config.ts</code>
+                        </p>
                     </div>
                 </div>
 
@@ -969,18 +1293,24 @@ Generated by [POM Builder](https://hariprasadms.github.io/pomtestbuilder/)`;
                             </div>
                         )}
 
-                        {/* Pages list always visible */}
+                        {/* Pages list with rename buttons */}
                         {pages.length > 0 && (
                             <div style={{marginTop: mode === 'manual' ? 0 : 20, paddingTop: mode === 'manual' ? 16 : 0, borderTop: mode === 'manual' ? '1px solid #f0eef8' : 'none'}}>
-                                <div style={{fontSize:13, fontWeight:600, color:'#6b7280', marginBottom:10}}>Pages queued for generation:</div>
+                                <div style={{fontSize:13, fontWeight:600, color:'#6b7280', marginBottom:10}}>
+                                    Pages queued for generation:
+                                    <span style={{fontWeight:400, marginLeft:8, fontSize:12, color:'#9ca3af'}}>✏️ click to rename</span>
+                                </div>
                                 <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
                                     {pages.map((p, i) => (
-                                        <div key={i} className="page-pill">
-                                            {p.steps?.length > 0 && (
-                                                <span style={{background:'rgba(255,255,255,0.2)', borderRadius:10, padding:'1px 7px', fontSize:11}}>{p.steps.length} steps</span>
-                                            )}
-                                            {p.name}
-                                            <span onClick={() => removePage(i)} style={{cursor:'pointer', opacity:0.7, fontSize:16}}>×</span>
+                                        <div key={i} className="page-pill-wrap">
+                                            <div className="page-pill-inner">
+                                                {p.steps?.length > 0 && (
+                                                    <span style={{background:'rgba(255,255,255,0.2)', borderRadius:10, padding:'1px 7px', fontSize:11}}>{p.steps.length} steps</span>
+                                                )}
+                                                {p.name}
+                                            </div>
+                                            <button className="page-pill-edit" title="Rename page" onClick={() => openRename(i)}>✏️</button>
+                                            <button className="page-pill-edit" title="Remove page" onClick={() => removePage(i)} style={{borderLeft:'1px solid rgba(255,255,255,0.15)'}}>×</button>
                                         </div>
                                     ))}
                                 </div>
