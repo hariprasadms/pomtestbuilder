@@ -12,7 +12,75 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/typescript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
     <link rel="stylesheet" href="./css/styles.css">
+    <style>
+        .code-card {
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+        .code-card:hover {
+            transform: translateX(4px);
+            border-left-color: #7c3aed;
+            box-shadow: 0 10px 25px rgba(124, 58, 237, 0.2);
+        }
+        .tab-button {
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        .tab-button::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #7c3aed, #6366f1);
+            transition: width 0.3s ease;
+        }
+        .tab-button.active::after,
+        .tab-button:hover::after {
+            width: 100%;
+        }
+        .file-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 9999px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
+            transition: all 0.3s ease;
+        }
+        .file-badge:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+        }
+        pre code {
+            border-radius: 12px !important;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+        }
+        .copy-button {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .code-wrapper:hover .copy-button {
+            opacity: 1;
+        }
+        .download-icon {
+            animation: bounce 2s infinite;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+    </style>
 </head>
 <body>
     <div id="root"></div>
@@ -26,17 +94,29 @@
             const [pageUrl, setPageUrl] = useState('');
             const [baseUrl, setBaseUrl] = useState('https://demo.playwright.dev/todomvc');
             const [generatedFiles, setGeneratedFiles] = useState({});
-            const [activeTab, setActiveTab] = useState('pageObjects');
+            const [mainTab, setMainTab] = useState('pageObjects');
+            const [selectedPageObject, setSelectedPageObject] = useState(null);
+            const [selectedTest, setSelectedTest] = useState(null);
+            const [selectedConfig, setSelectedConfig] = useState(null);
             const [showOutput, setShowOutput] = useState(false);
-            const [selectedPageForView, setSelectedPageForView] = useState(null);
+            const [copiedFile, setCopiedFile] = useState(null);
 
             useEffect(() => {
                 if (showOutput && Object.keys(generatedFiles).length > 0) {
-                    document.querySelectorAll('pre code').forEach((block) => {
-                        hljs.highlightElement(block);
-                    });
+                    setTimeout(() => {
+                        document.querySelectorAll('pre code').forEach((block) => {
+                            hljs.highlightElement(block);
+                        });
+                    }, 100);
                 }
-            }, [showOutput, generatedFiles, selectedPageForView]);
+            }, [showOutput, generatedFiles, selectedPageObject, selectedTest, selectedConfig, mainTab]);
+
+            const copyToClipboard = (content, filename) => {
+                navigator.clipboard.writeText(content).then(() => {
+                    setCopiedFile(filename);
+                    setTimeout(() => setCopiedFile(null), 2000);
+                });
+            };
 
             const validatePageName = (name) => {
                 if (!name || name.trim().length === 0) {
@@ -77,6 +157,7 @@ export class ${page.name} {
     private passwordInput = '#password';
     private submitButton = 'button[type="submit"]';
     private errorMessage = '.error-message';
+    private successMessage = '.success-message';
     
     constructor(page: Page) {
         this.page = page;
@@ -86,7 +167,7 @@ ${page.url ? `
         await this.page.goto('${page.url}');
     }
 ` : ''}
-    // Sample getter methods - customize these for your page
+    // Getter Methods - Returns Promise<Locator>
     async getUsernameInput(): Promise<Locator> {
         return this.page.locator(this.usernameInput);
     }
@@ -103,7 +184,11 @@ ${page.url ? `
         return this.page.locator(this.errorMessage);
     }
 
-    // Sample action methods - customize these for your page
+    async getSuccessMessage(): Promise<Locator> {
+        return this.page.locator(this.successMessage);
+    }
+
+    // Action Methods - Returns Promise<void>
     async fillUsername(username: string): Promise<void> {
         await (await this.getUsernameInput()).fill(username);
     }
@@ -116,16 +201,34 @@ ${page.url ? `
         await (await this.getSubmitButton()).click();
     }
 
+    // Validation Methods
     async getErrorText(): Promise<string> {
         return await (await this.getErrorMessage()).textContent() || '';
     }
 
+    async getSuccessText(): Promise<string> {
+        return await (await this.getSuccessMessage()).textContent() || '';
+    }
+
+    async isErrorVisible(): Promise<boolean> {
+        return await (await this.getErrorMessage()).isVisible();
+    }
+
+    async isSuccessVisible(): Promise<boolean> {
+        return await (await this.getSuccessMessage()).isVisible();
+    }
+
+    // Utility Methods
     async waitForPageLoad(): Promise<void> {
         await this.page.waitForLoadState('networkidle');
     }
 
     async isVisible(selector: string): Promise<boolean> {
         return await this.page.locator(selector).isVisible();
+    }
+
+    async waitForElement(selector: string, timeout: number = 5000): Promise<void> {
+        await this.page.waitForSelector(selector, { timeout });
     }
 }`;
             };
@@ -138,36 +241,78 @@ test.describe('${page.name} Tests', () => {
     let pageObject: ${page.name};
 
     test.beforeEach(async ({ page }: { page: Page }) => {
+        // Initialize page object
         pageObject = new ${page.name}(page);
+        
+        // Navigate to the page
         ${page.url ? `await pageObject.navigate();` : `await page.goto('${baseUrl}');`}
+        
+        // Wait for page to be fully loaded
         await pageObject.waitForPageLoad();
     });
 
     test.afterEach(async ({ page }: { page: Page }) => {
         // Cleanup after each test
         console.log('Test completed, cleaning up...');
+        
+        // Optional: Take screenshot on failure
+        // if (test.info().status !== test.info().expectedStatus) {
+        //     await page.screenshot({ path: \`screenshots/\${test.info().title}.png\` });
+        // }
     });
 
     test('should load ${page.name} successfully', async ({ page }: { page: Page }) => {
+        // Verify page loaded
         await expect(page).toHaveURL(/./);
         await expect(page).toHaveTitle(/./);
     });
 
     // TODO: Replace with your actual test scenarios
-    test('sample test - customize this', async ({ page }: { page: Page }) => {
-        // Example: Test form submission
-        await pageObject.fillUsername('testuser');
-        await pageObject.fillPassword('testpass');
-        await pageObject.clickSubmit();
-        await pageObject.waitForPageLoad();
-    });
-
-    test('sample validation test - customize this', async ({ page }: { page: Page }) => {
+    test('should validate form elements are visible', async ({ page }: { page: Page }) => {
+        // Verify critical elements are visible
         const usernameInput = await pageObject.getUsernameInput();
         await expect(usernameInput).toBeVisible();
         
+        const passwordInput = await pageObject.getPasswordInput();
+        await expect(passwordInput).toBeVisible();
+        
         const submitButton = await pageObject.getSubmitButton();
+        await expect(submitButton).toBeVisible();
+    });
+
+    test('should handle form interaction', async ({ page }: { page: Page }) => {
+        // Example: Test form submission
+        await pageObject.fillUsername('testuser@example.com');
+        await pageObject.fillPassword('SecurePass123');
+        await pageObject.clickSubmit();
+        
+        // Wait for response
+        await pageObject.waitForPageLoad();
+        
+        // Add your assertions here
+        // await expect(await pageObject.isSuccessVisible()).toBeTruthy();
+    });
+
+    test('should validate input fields', async ({ page }: { page: Page }) => {
+        // Example: Test field validation
+        const usernameInput = await pageObject.getUsernameInput();
+        
+        // Test empty field
+        await usernameInput.fill('');
+        await expect(usernameInput).toBeEmpty();
+        
+        // Test with value
+        await pageObject.fillUsername('test@example.com');
+        await expect(usernameInput).toHaveValue('test@example.com');
+    });
+
+    test('should handle button states', async ({ page }: { page: Page }) => {
+        const submitButton = await pageObject.getSubmitButton();
+        
+        // Verify button is enabled
         await expect(submitButton).toBeEnabled();
+        
+        // Add more button state tests as needed
     });
 });`;
             };
@@ -185,66 +330,138 @@ test.describe('${page.name} Tests', () => {
                     files[`tests/${page.name.toLowerCase()}.spec.ts`] = generateTestFile(page);
                 });
 
-                // Generate config files
+                // Configuration files
                 files['playwright.config.ts'] = `import { defineConfig, devices } from '@playwright/test';
 
+/**
+ * Playwright Test Configuration
+ * Customize this file to match your testing requirements
+ */
 export default defineConfig({
     testDir: './tests',
+    
+    // Run tests in parallel
     fullyParallel: true,
+    
+    // Fail the build on CI if test.only is used
     forbidOnly: !!process.env.CI,
+    
+    // Retry failed tests on CI
     retries: process.env.CI ? 2 : 0,
+    
+    // Limit workers on CI
     workers: process.env.CI ? 1 : undefined,
+    
+    // Reporter configuration
     reporter: [
-        ['html'],
+        ['html', { outputFolder: 'playwright-report' }],
         ['json', { outputFile: 'test-results/results.json' }],
         ['list']
     ],
+    
+    // Shared settings for all tests
     use: {
+        // Base URL for all tests
         baseURL: '${baseUrl}',
+        
+        // Collect trace on first retry
         trace: 'on-first-retry',
+        
+        // Screenshot on failure
         screenshot: 'only-on-failure',
+        
+        // Video on failure
         video: 'retain-on-failure',
+        
+        // Run in headless mode
         headless: true,
+        
+        // Browser viewport
         viewport: { width: 1280, height: 720 },
+        
+        // Ignore HTTPS errors
         ignoreHTTPSErrors: true,
+        
+        // Action timeout
         actionTimeout: 10000,
+        
+        // Navigation timeout
+        navigationTimeout: 30000,
     },
+
+    // Browser projects for cross-browser testing
     projects: [
         {
             name: 'chromium',
-            use: { ...devices['Desktop Chrome'] },
+            use: { 
+                ...devices['Desktop Chrome'],
+                channel: 'chrome',
+            },
         },
         {
             name: 'firefox',
-            use: { ...devices['Desktop Firefox'] },
+            use: { 
+                ...devices['Desktop Firefox'] 
+            },
         },
         {
             name: 'webkit',
-            use: { ...devices['Desktop Safari'] },
+            use: { 
+                ...devices['Desktop Safari'] 
+            },
         },
+        
+        // Mobile browsers
         {
             name: 'Mobile Chrome',
-            use: { ...devices['Pixel 5'] },
+            use: { 
+                ...devices['Pixel 5'] 
+            },
         },
         {
             name: 'Mobile Safari',
-            use: { ...devices['iPhone 12'] },
+            use: { 
+                ...devices['iPhone 12'] 
+            },
         },
     ],
+
+    // Optional: Web server configuration
+    // webServer: {
+    //     command: 'npm run start',
+    //     url: 'http://localhost:3000',
+    //     reuseExistingServer: !process.env.CI,
+    //     timeout: 120000,
+    // },
 });`;
 
                 files['package.json'] = JSON.stringify({
                     "name": "playwright-pom-framework",
                     "version": "1.0.0",
-                    "description": "Playwright test automation framework with Page Object Model",
+                    "description": "Playwright test automation framework with Page Object Model pattern",
+                    "main": "index.js",
                     "scripts": {
                         "test": "playwright test",
                         "test:headed": "playwright test --headed",
                         "test:debug": "playwright test --debug",
                         "test:ui": "playwright test --ui",
-                        "report": "playwright show-report"
+                        "test:chrome": "playwright test --project=chromium",
+                        "test:firefox": "playwright test --project=firefox",
+                        "test:webkit": "playwright test --project=webkit",
+                        "test:mobile": "playwright test --project='Mobile Chrome'",
+                        "test:headed:chrome": "playwright test --project=chromium --headed",
+                        "test:report": "playwright show-report",
+                        "test:codegen": "playwright codegen",
+                        "install:browsers": "playwright install"
                     },
-                    "keywords": ["playwright", "testing", "automation", "pom", "typescript"],
+                    "keywords": [
+                        "playwright",
+                        "testing",
+                        "automation",
+                        "pom",
+                        "typescript",
+                        "e2e"
+                    ],
                     "author": "Hari Prasad MS",
                     "license": "MIT",
                     "devDependencies": {
@@ -262,69 +479,196 @@ export default defineConfig({
                         "strict": true,
                         "esModuleInterop": true,
                         "skipLibCheck": true,
-                        "types": ["node", "@playwright/test"]
+                        "forceConsistentCasingInFileNames": true,
+                        "resolveJsonModule": true,
+                        "moduleResolution": "node",
+                        "types": ["node", "@playwright/test"],
+                        "outDir": "./dist",
+                        "rootDir": "./"
                     },
-                    "include": ["tests/**/*", "pages/**/*"]
+                    "include": [
+                        "tests/**/*",
+                        "pages/**/*"
+                    ],
+                    "exclude": [
+                        "node_modules",
+                        "dist",
+                        "test-results",
+                        "playwright-report"
+                    ]
                 }, null, 2);
+
+                files['.gitignore'] = `# Dependencies
+node_modules/
+
+# Test results
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Build outputs
+dist/
+
+# Environment files
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Package lock files
+package-lock.json
+yarn.lock`;
 
                 files['README.md'] = `# Playwright POM Framework
 
 ## 📋 Overview
-Generated Playwright test framework with Page Object Model pattern.
+Generated Playwright test framework with Page Object Model pattern and TypeScript.
 
 **Base URL:** ${baseUrl}
 
 ## 🚀 Quick Start
 
+### Installation
 \`\`\`bash
+# Install dependencies
 npm install
-npx playwright install
+
+# Install Playwright browsers
+npm run install:browsers
+\`\`\`
+
+### Running Tests
+\`\`\`bash
+# Run all tests
 npm test
+
+# Run in headed mode (see browser)
+npm run test:headed
+
+# Run in UI mode (interactive)
+npm run test:ui
+
+# Run specific browser
+npm run test:chrome
+npm run test:firefox
+npm run test:webkit
+
+# Run mobile tests
+npm run test:mobile
+
+# Debug mode
+npm run test:debug
+
+# View test report
+npm run test:report
 \`\`\`
 
 ## 📝 Customization Guide
 
-The generated files contain sample code with TODO comments. Follow these steps:
+### Step 1: Update Page Objects (\`pages/*.ts\`)
 
-1. **Update Page Objects** (\`pages/*.ts\`):
-   - Replace sample locators with your actual page elements
-   - Add/remove getter methods as needed
-   - Customize action methods for your use case
+Each page object contains **TODO** comments marking areas to customize:
 
-2. **Update Tests** (\`tests/*.spec.ts\`):
-   - Replace sample tests with your actual test scenarios
-   - Update test data and assertions
+\`\`\`typescript
+// TODO: Replace these sample locators with your actual page elements
+private usernameInput = '#username';  // ← Update this
+private passwordInput = '#password';  // ← Update this
+\`\`\`
 
-3. **Configuration** (\`playwright.config.ts\`):
-   - Adjust browser settings if needed
-   - Update baseURL if required
+**What to customize:**
+- Replace sample locators with your actual selectors
+- Add new element locators as needed
+- Update getter methods
+- Modify action methods for your use case
+- Add custom validation methods
 
-## 📁 Structure
+### Step 2: Update Tests (\`tests/*.spec.ts\`)
+
+Each test file includes sample tests marked with **TODO**:
+
+\`\`\`typescript
+// TODO: Replace with your actual test scenarios
+test('should handle form interaction', async ({ page }) => {
+    // Customize this test for your needs
+});
+\`\`\`
+
+**What to customize:**
+- Update test descriptions
+- Modify test data and assertions
+- Add new test cases
+- Update expected behaviors
+
+### Step 3: Configure Settings
+
+Review \`playwright.config.ts\` and adjust:
+- Browser settings
+- Timeout values
+- Screenshot/video options
+- Viewport sizes
+
+## 📁 Project Structure
 
 \`\`\`
-├── pages/              # Page Object Models (customize these!)
-├── tests/              # Test specifications (customize these!)
-├── playwright.config.ts
-├── package.json
-└── tsconfig.json
+.
+├── pages/              # Page Object Models (customize locators here)
+├── tests/              # Test specifications (customize tests here)
+├── playwright.config.ts # Playwright configuration
+├── package.json        # NPM scripts and dependencies
+├── tsconfig.json       # TypeScript configuration
+└── README.md          # This file
 \`\`\`
+
+## 🎯 Best Practices
+
+1. **Keep page objects focused** - One page object per page
+2. **Use meaningful names** - Clear method and variable names
+3. **Add wait conditions** - Ensure stability with proper waits
+4. **Use data-testid** - When possible, use test-specific selectors
+5. **Write atomic tests** - Each test should be independent
+
+## 🔧 Troubleshooting
+
+### Tests not running?
+\`\`\`bash
+# Make sure browsers are installed
+npm run install:browsers
+\`\`\`
+
+### TypeScript errors?
+\`\`\`bash
+# Check tsconfig.json
+# Ensure @playwright/test is installed
+npm install
+\`\`\`
+
+## 📚 Resources
+
+- [Playwright Documentation](https://playwright.dev)
+- [Page Object Model Pattern](https://playwright.dev/docs/pom)
+- [TypeScript Guide](https://www.typescriptlang.org/)
 
 ---
 Generated by [Playwright POM Generator](https://hariprasadms.github.io/pomtestbuilder/)
-`;
 
-                files['.gitignore'] = `node_modules/
-test-results/
-playwright-report/
-playwright/.cache/
-dist/
-.env
-*.log
-package-lock.json`;
+**Created by:** Hariprasad MS | SDER Experts Ltd
+`;
 
                 setGeneratedFiles(files);
                 setShowOutput(true);
-                setSelectedPageForView(null);
+                setSelectedPageObject(null);
+                setSelectedTest(null);
+                setSelectedConfig(null);
 
                 setTimeout(() => {
                     const outputElement = document.getElementById('output-section');
@@ -362,6 +706,10 @@ package-lock.json`;
                 URL.revokeObjectURL(url);
             };
 
+            const pageObjectFiles = Object.keys(generatedFiles).filter(f => f.startsWith('pages/'));
+            const testFiles = Object.keys(generatedFiles).filter(f => f.startsWith('tests/'));
+            const configFiles = ['playwright.config.ts', 'package.json', 'tsconfig.json', 'README.md', '.gitignore'];
+
             return (
                 <div className="min-h-screen bg-gradient-to-br from-purple-600 to-indigo-700">
                     {/* Header */}
@@ -385,7 +733,7 @@ package-lock.json`;
                     </header>
 
                     <div className="p-6">
-                        <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-2xl">
+                        <div className="max-w-7xl mx-auto bg-white rounded-xl shadow-2xl">
                             <div className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white p-8 text-center">
                                 <h2 className="text-3xl font-bold mb-2">Generate Page Object Models</h2>
                                 <p className="text-purple-100">Create TypeScript page objects with sample code you can customize</p>
@@ -433,7 +781,7 @@ package-lock.json`;
                                     </button>
                                     <div className="flex flex-wrap gap-2 mt-4">
                                         {pages.map((p, i) => (
-                                            <span key={i} className="bg-purple-600 text-white px-4 py-2 rounded-full flex items-center gap-2 shadow-md">
+                                            <span key={i} className="file-badge">
                                                 {p.name}
                                                 <span onClick={() => removePage(i)} className="cursor-pointer text-xl hover:text-red-200 transition">×</span>
                                             </span>
@@ -449,7 +797,7 @@ package-lock.json`;
                                             🚀 Generate POM
                                         </button>
                                         <button onClick={() => { generatePOM(); setTimeout(downloadAllFiles, 500); }} disabled={pages.length === 0} className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-8 py-3 rounded-lg font-bold hover:from-indigo-700 hover:to-indigo-800 transition shadow-lg transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
-                                            📦 Generate & Download ZIP
+                                            <span className="download-icon inline-block">📦</span> Generate & Download ZIP
                                         </button>
                                     </div>
                                 </div>
@@ -461,100 +809,183 @@ package-lock.json`;
                                             ✅ Generated {Object.keys(generatedFiles).length} files successfully! Sample code included - customize for your needs.
                                         </div>
 
-                                        {/* Page File Viewer */}
-                                        <div className="mb-6 p-6 bg-purple-50 rounded-lg border-2 border-purple-300">
-                                            <h3 className="text-xl font-bold text-purple-700 mb-4">👁️ View Generated Page Files</h3>
-                                            <div className="flex flex-wrap gap-2 mb-4">
-                                                {Object.keys(generatedFiles).filter(f => f.startsWith('pages/')).map(f => (
-                                                    <button
-                                                        key={f}
-                                                        onClick={() => setSelectedPageForView(f)}
-                                                        className={`px-4 py-2 rounded-lg font-semibold transition ${selectedPageForView === f ? 'bg-purple-700 text-white' : 'bg-white text-purple-700 hover:bg-purple-100'}`}
-                                                    >
-                                                        {f.split('/').pop().replace('.ts', '')}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            {selectedPageForView && (
-                                                <div>
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <h4 className="font-bold text-lg text-purple-700">{selectedPageForView}</h4>
-                                                        <button onClick={() => downloadFile(selectedPageForView)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
-                                                            💾 Download
-                                                        </button>
-                                                    </div>
-                                                    <pre className="rounded-lg overflow-hidden">
-                                                        <code className="typescript">{generatedFiles[selectedPageForView]}</code>
-                                                    </pre>
-                                                </div>
-                                            )}
-                                            {!selectedPageForView && (
-                                                <p className="text-gray-600 text-center py-8">Click on a page name above to view its generated code</p>
-                                            )}
-                                        </div>
-
-                                        {/* Tabs for other files */}
-                                        <div className="flex gap-2 mb-4 border-b-2 border-gray-200 flex-wrap">
-                                            {['tests', 'config'].map(tab => (
+                                        {/* Main Tabs */}
+                                        <div className="flex gap-2 mb-6 border-b-2 border-gray-200 flex-wrap">
+                                            {[
+                                                { id: 'pageObjects', label: '📄 Page Objects', count: pageObjectFiles.length },
+                                                { id: 'tests', label: '🧪 Tests', count: testFiles.length },
+                                                { id: 'config', label: '⚙️ Configuration', count: configFiles.length }
+                                            ].map(tab => (
                                                 <button 
-                                                    key={tab} 
-                                                    onClick={() => setActiveTab(tab)} 
-                                                    className={`px-6 py-3 font-semibold transition ${activeTab === tab ? 'text-purple-700 border-b-4 border-purple-700' : 'text-gray-600 hover:text-purple-600'}`}
+                                                    key={tab.id} 
+                                                    onClick={() => {
+                                                        setMainTab(tab.id);
+                                                        if (tab.id === 'pageObjects') setSelectedPageObject(pageObjectFiles[0]);
+                                                        if (tab.id === 'tests') setSelectedTest(testFiles[0]);
+                                                        if (tab.id === 'config') setSelectedConfig(configFiles[0]);
+                                                    }} 
+                                                    className={`tab-button px-6 py-3 font-semibold transition ${mainTab === tab.id ? 'text-purple-700 active' : 'text-gray-600 hover:text-purple-600'}`}
                                                 >
-                                                    {tab === 'tests' && '🧪 Tests'}
-                                                    {tab === 'config' && '⚙️ Configuration'}
+                                                    {tab.label} ({tab.count})
                                                 </button>
                                             ))}
                                         </div>
 
-                                        {activeTab === 'tests' && (
+                                        {/* Page Objects Tab */}
+                                        {mainTab === 'pageObjects' && (
                                             <div>
-                                                {Object.keys(generatedFiles).filter(f => f.startsWith('tests')).map(f => (
-                                                    <div key={f} className="mb-6">
-                                                        <div className="flex justify-between items-center mb-2">
-                                                            <h3 className="font-bold text-lg text-purple-700">{f}</h3>
-                                                            <button onClick={() => downloadFile(f)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
-                                                                💾 Download
-                                                            </button>
-                                                        </div>
-                                                        <pre className="rounded-lg overflow-hidden">
-                                                            <code className="typescript">{generatedFiles[f]}</code>
-                                                        </pre>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        {activeTab === 'config' && (
-                                            <div>
-                                                {['playwright.config.ts', 'package.json', 'tsconfig.json', 'README.md', '.gitignore'].map(f => (
-                                                    generatedFiles[f] && (
-                                                        <div key={f} className="mb-6">
-                                                            <div className="flex justify-between items-center mb-2">
-                                                                <h3 className="font-bold text-lg text-purple-700">{f}</h3>
-                                                                <button onClick={() => downloadFile(f)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                                                <div className="grid md:grid-cols-4 gap-4 mb-6">
+                                                    {pageObjectFiles.map(file => (
+                                                        <button
+                                                            key={file}
+                                                            onClick={() => setSelectedPageObject(file)}
+                                                            className={`p-4 rounded-lg font-semibold text-left transition transform hover:scale-105 ${selectedPageObject === file ? 'bg-gradient-to-br from-purple-600 to-indigo-600 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                        >
+                                                            <div className="text-2xl mb-2">📄</div>
+                                                            <div className="text-sm">{file.split('/').pop().replace('.ts', '')}</div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                {selectedPageObject && (
+                                                    <div className="code-card bg-white p-6 rounded-lg shadow-lg">
+                                                        <div className="flex justify-between items-center mb-4">
+                                                            <h3 className="text-xl font-bold text-purple-700">{selectedPageObject}</h3>
+                                                            <div className="flex gap-2">
+                                                                <button 
+                                                                    onClick={() => copyToClipboard(generatedFiles[selectedPageObject], selectedPageObject)}
+                                                                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition text-sm"
+                                                                >
+                                                                    {copiedFile === selectedPageObject ? '✓ Copied!' : '📋 Copy'}
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => downloadFile(selectedPageObject)} 
+                                                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                                                                >
                                                                     💾 Download
                                                                 </button>
                                                             </div>
+                                                        </div>
+                                                        <div className="code-wrapper relative">
                                                             <pre className="rounded-lg overflow-hidden">
-                                                                <code className={f.endsWith('.json') ? 'json' : f.endsWith('.ts') ? 'typescript' : 'plaintext'}>
-                                                                    {generatedFiles[f]}
-                                                                </code>
+                                                                <code className="typescript">{generatedFiles[selectedPageObject]}</code>
                                                             </pre>
                                                         </div>
-                                                    )
-                                                ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 
-                                        {/* Download All */}
-                                        <div className="mt-8 p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border-2 border-purple-300">
-                                            <h3 className="text-xl font-semibold mb-4">📦 Download Complete Framework</h3>
-                                            <button onClick={downloadAllFiles} className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white px-8 py-4 rounded-lg font-bold text-lg hover:from-purple-700 hover:to-indigo-800 shadow-lg transition transform hover:scale-105">
-                                                📦 Download ZIP Archive
+                                        {/* Tests Tab */}
+                                        {mainTab === 'tests' && (
+                                            <div>
+                                                <div className="grid md:grid-cols-4 gap-4 mb-6">
+                                                    {testFiles.map(file => (
+                                                        <button
+                                                            key={file}
+                                                            onClick={() => setSelectedTest(file)}
+                                                            className={`p-4 rounded-lg font-semibold text-left transition transform hover:scale-105 ${selectedTest === file ? 'bg-gradient-to-br from-green-600 to-teal-600 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                        >
+                                                            <div className="text-2xl mb-2">🧪</div>
+                                                            <div className="text-sm">{file.split('/').pop().replace('.spec.ts', '')}</div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                {selectedTest && (
+                                                    <div className="code-card bg-white p-6 rounded-lg shadow-lg">
+                                                        <div className="flex justify-between items-center mb-4">
+                                                            <h3 className="text-xl font-bold text-green-700">{selectedTest}</h3>
+                                                            <div className="flex gap-2">
+                                                                <button 
+                                                                    onClick={() => copyToClipboard(generatedFiles[selectedTest], selectedTest)}
+                                                                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition text-sm"
+                                                                >
+                                                                    {copiedFile === selectedTest ? '✓ Copied!' : '📋 Copy'}
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => downloadFile(selectedTest)} 
+                                                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                                                                >
+                                                                    💾 Download
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="code-wrapper relative">
+                                                            <pre className="rounded-lg overflow-hidden">
+                                                                <code className="typescript">{generatedFiles[selectedTest]}</code>
+                                                            </pre>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Configuration Tab */}
+                                        {mainTab === 'config' && (
+                                            <div>
+                                                <div className="grid md:grid-cols-5 gap-4 mb-6">
+                                                    {configFiles.map(file => {
+                                                        const icons = {
+                                                            'playwright.config.ts': '⚙️',
+                                                            'package.json': '📦',
+                                                            'tsconfig.json': '🔧',
+                                                            'README.md': '📖',
+                                                            '.gitignore': '🚫'
+                                                        };
+                                                        return generatedFiles[file] && (
+                                                            <button
+                                                                key={file}
+                                                                onClick={() => setSelectedConfig(file)}
+                                                                className={`p-4 rounded-lg font-semibold text-left transition transform hover:scale-105 ${selectedConfig === file ? 'bg-gradient-to-br from-orange-600 to-red-600 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                            >
+                                                                <div className="text-2xl mb-2">{icons[file]}</div>
+                                                                <div className="text-xs break-words">{file}</div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                                {selectedConfig && (
+                                                    <div className="code-card bg-white p-6 rounded-lg shadow-lg">
+                                                        <div className="flex justify-between items-center mb-4">
+                                                            <h3 className="text-xl font-bold text-orange-700">{selectedConfig}</h3>
+                                                            <div className="flex gap-2">
+                                                                <button 
+                                                                    onClick={() => copyToClipboard(generatedFiles[selectedConfig], selectedConfig)}
+                                                                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition text-sm"
+                                                                >
+                                                                    {copiedFile === selectedConfig ? '✓ Copied!' : '📋 Copy'}
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => downloadFile(selectedConfig)} 
+                                                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                                                                >
+                                                                    💾 Download
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="code-wrapper relative">
+                                                            <pre className="rounded-lg overflow-hidden">
+                                                                <code className={selectedConfig.endsWith('.json') ? 'json' : selectedConfig.endsWith('.ts') ? 'typescript' : 'plaintext'}>
+                                                                    {generatedFiles[selectedConfig]}
+                                                                </code>
+                                                            </pre>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Download All Section */}
+                                        <div className="mt-8 p-8 bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 rounded-lg border-2 border-purple-300 text-center">
+                                            <h3 className="text-2xl font-bold mb-4 text-purple-800">📦 Download Complete Framework</h3>
+                                            <button 
+                                                onClick={downloadAllFiles} 
+                                                className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white px-10 py-4 rounded-lg font-bold text-lg hover:from-purple-700 hover:to-indigo-800 shadow-lg transition transform hover:scale-105"
+                                            >
+                                                <span className="download-icon inline-block mr-2">📦</span>
+                                                Download ZIP Archive ({Object.keys(generatedFiles).length} files)
                                             </button>
-                                            <p className="mt-3 text-gray-600 text-sm">
-                                                Includes: Page Objects with sample code, Tests, Config files, and README with customization guide
+                                            <p className="mt-4 text-gray-600 text-sm">
+                                                Includes: Page Objects, Tests with hooks, Config files, and README with customization guide
                                             </p>
                                         </div>
                                     </div>
