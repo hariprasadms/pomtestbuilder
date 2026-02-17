@@ -1,23 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Playwright POM Generator - Beta</title>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <title>Playwright POM Generator - Create Page Objects</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/typescript.min.js"></script>
+    <link rel="stylesheet" href="./css/styles.css">
 </head>
-
 <body>
     <div id="root"></div>
+    
     <script type="text/babel">
         const { useState, useEffect } = React;
 
@@ -26,40 +25,36 @@
             const [pageName, setPageName] = useState('');
             const [pageUrl, setPageUrl] = useState('');
             const [baseUrl, setBaseUrl] = useState('https://demo.playwright.dev/todomvc');
-            const [testCode, setTestCode] = useState(`test('example todo test', async ({ page }) => {
-    await page.goto('https://demo.playwright.dev/todomvc');
-    await page.fill('.new-todo', 'Buy groceries');
-    await page.press('.new-todo', 'Enter');
-    await page.fill('.new-todo', 'Walk the dog');
-    await page.press('.new-todo', 'Enter');
-    await page.click('.todo-list li:first-child .toggle');
-    await page.waitForSelector('.todo-count');
-});`);
-            const [screenshotPreview, setScreenshotPreview] = useState('');
             const [generatedFiles, setGeneratedFiles] = useState({});
             const [activeTab, setActiveTab] = useState('pageObjects');
-            const [detectedElements, setDetectedElements] = useState([]);
             const [showOutput, setShowOutput] = useState(false);
+            const [selectedPageForView, setSelectedPageForView] = useState(null);
 
             useEffect(() => {
-                // Highlight code blocks when content changes
-                if (showOutput) {
+                if (showOutput && Object.keys(generatedFiles).length > 0) {
                     document.querySelectorAll('pre code').forEach((block) => {
                         hljs.highlightElement(block);
                     });
                 }
-            }, [showOutput, activeTab, generatedFiles]);
+            }, [showOutput, generatedFiles, selectedPageForView]);
 
-            const scrollToSection = (sectionId) => {
-                const element = document.getElementById(sectionId);
-                if (element) {
-                    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const validatePageName = (name) => {
+                if (!name || name.trim().length === 0) {
+                    return { valid: false, error: 'Page name is required' };
                 }
+                if (!/^[A-Z][a-zA-Z0-9]*$/.test(name)) {
+                    return { valid: false, error: 'Page name must start with capital letter and contain only alphanumeric characters' };
+                }
+                if (!name.endsWith('Page')) {
+                    return { valid: false, error: 'Page name should end with "Page" (e.g., LoginPage)' };
+                }
+                return { valid: true };
             };
 
             const addPage = () => {
-                if (!pageName.trim()) {
-                    alert('Please enter a page name');
+                const validation = validatePageName(pageName);
+                if (!validation.valid) {
+                    alert(validation.error);
                     return;
                 }
                 setPages([...pages, { name: pageName, url: pageUrl }]);
@@ -71,94 +66,61 @@
                 setPages(pages.filter((_, i) => i !== index));
             };
 
-            const handleTestFileUpload = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => setTestCode(event.target.result);
-                    reader.readAsText(file);
-                }
-            };
-
-            const handleScreenshotUpload = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => setScreenshotPreview(event.target.result);
-                    reader.readAsDataURL(file);
-                }
-            };
-
-            const extractElementsFromCode = (code) => {
-                const elements = [];
-                const patterns = [
-                    { regex: /page\.fill\(['"`]([^'"`]+)['"`]/g, type: 'input' },
-                    { regex: /page\.click\(['"`]([^'"`]+)['"`]/g, type: 'button' },
-                    { regex: /page\.locator\(['"`]([^'"`]+)['"`]/g, type: 'element' },
-                    { regex: /page\.getByRole\(['"`]([^'"`]+)['"`]/g, type: 'role' },
-                    { regex: /page\.getByText\(['"`]([^'"`]+)['"`]/g, type: 'text' },
-                    { regex: /page\.waitForSelector\(['"`]([^'"`]+)['"`]/g, type: 'element' },
-                    { regex: /page\.press\(['"`]([^'"`]+)['"`]/g, type: 'element' },
-                    { regex: /page\.\$\(['"`]([^'"`]+)['"`]/g, type: 'element' }
-                ];
-
-                patterns.forEach(({ regex, type }) => {
-                    let match;
-                    while ((match = regex.exec(code)) !== null) {
-                        const selector = match[1];
-                        const name = generateElementName(selector, type);
-                        if (!elements.find(e => e.selector === selector)) {
-                            elements.push({ selector, type, name });
-                        }
-                    }
-                });
-                return elements;
-            };
-
-            const generateElementName = (selector, type) => {
-                let name = selector
-                    .replace(/[#.\[\]'"=:]/g, ' ')
-                    .trim()
-                    .split(/\s+/)
-                    .filter(w => w)
-                    .map((w, i) => i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-                    .join('');
-                const prefix = { input: 'input', button: 'btn', element: 'el', role: 'el', text: 'txt' }[type] || 'el';
-                return `${prefix}${(name || 'Element').charAt(0).toUpperCase() + (name || 'Element').slice(1)}`;
-            };
-
-            const generatePageObject = (page, elements) => {
-                const declarations = elements.map(el => `    private ${el.name} = '${el.selector}';`).join('\n');
-                const getters = elements.map(el => {
-                    const method = el.name.replace(/^(input|btn|el|txt)/, '');
-                    return `    async get${method.charAt(0).toUpperCase() + method.slice(1)}() {\n        return this.page.locator(this.${el.name});\n    }`;
-                }).join('\n\n');
-
-                const inputMethods = elements.filter(e => e.type === 'input').map(el => {
-                    const method = el.name.replace(/^input/, '');
-                    return `    async fill${method.charAt(0).toUpperCase() + method.slice(1)}(text: string) {\n        await this.page.locator(this.${el.name}).fill(text);\n    }`;
-                }).join('\n\n');
-
-                const clickMethods = elements.filter(e => e.type === 'button').map(el => {
-                    const method = el.name.replace(/^btn/, '');
-                    return `    async click${method.charAt(0).toUpperCase() + method.slice(1)}() {\n        await this.page.locator(this.${el.name}).click();\n    }`;
-                }).join('\n\n');
-
+            const generateSamplePageObject = (page) => {
                 return `import { Page, Locator } from '@playwright/test';
 
 export class ${page.name} {
     readonly page: Page;
-${declarations}
-
+    
+    // TODO: Replace these sample locators with your actual page elements
+    private usernameInput = '#username';
+    private passwordInput = '#password';
+    private submitButton = 'button[type="submit"]';
+    private errorMessage = '.error-message';
+    
     constructor(page: Page) {
         this.page = page;
     }
-${page.url ? `\n    async navigate() {\n        await this.page.goto('${page.url}');\n    }\n` : ''}
-${getters}
-${inputMethods ? '\n' + inputMethods : ''}
-${clickMethods ? '\n' + clickMethods : ''}
+${page.url ? `
+    async navigate(): Promise<void> {
+        await this.page.goto('${page.url}');
+    }
+` : ''}
+    // Sample getter methods - customize these for your page
+    async getUsernameInput(): Promise<Locator> {
+        return this.page.locator(this.usernameInput);
+    }
 
-    async waitForPageLoad() {
+    async getPasswordInput(): Promise<Locator> {
+        return this.page.locator(this.passwordInput);
+    }
+
+    async getSubmitButton(): Promise<Locator> {
+        return this.page.locator(this.submitButton);
+    }
+
+    async getErrorMessage(): Promise<Locator> {
+        return this.page.locator(this.errorMessage);
+    }
+
+    // Sample action methods - customize these for your page
+    async fillUsername(username: string): Promise<void> {
+        await (await this.getUsernameInput()).fill(username);
+    }
+
+    async fillPassword(password: string): Promise<void> {
+        await (await this.getPasswordInput()).fill(password);
+    }
+
+    async clickSubmit(): Promise<void> {
+        await (await this.getSubmitButton()).click();
+    }
+
+    async getErrorText(): Promise<string> {
+        return await (await this.getErrorMessage()).textContent() || '';
+    }
+
+    async waitForPageLoad(): Promise<void> {
         await this.page.waitForLoadState('networkidle');
     }
 
@@ -168,10 +130,7 @@ ${clickMethods ? '\n' + clickMethods : ''}
 }`;
             };
 
-            const generateTestFile = (page, elements) => {
-                const inputElements = elements.filter(e => e.type === 'input');
-                const buttonElements = elements.filter(e => e.type === 'button');
-
+            const generateTestFile = (page) => {
                 return `import { test, expect, Page } from '@playwright/test';
 import { ${page.name} } from '../pages/${page.name}';
 
@@ -194,44 +153,39 @@ test.describe('${page.name} Tests', () => {
         await expect(page).toHaveTitle(/./);
     });
 
-    test('should interact with ${page.name} elements', async ({ page }: { page: Page }) => {
-        ${inputElements.slice(0, 2).map(el => {
-                    const method = el.name.replace(/^input/, '');
-                    return `await pageObject.fill${method.charAt(0).toUpperCase() + method.slice(1)}('test value');`;
-                }).join('\n        ')}
-        
-        ${buttonElements[0] ?
-                        `await pageObject.click${buttonElements[0].name.replace(/^btn/, '').charAt(0).toUpperCase() + buttonElements[0].name.replace(/^btn/, '').slice(1)}();` :
-                        '// Add button click actions here'
-                    }
-        
+    // TODO: Replace with your actual test scenarios
+    test('sample test - customize this', async ({ page }: { page: Page }) => {
+        // Example: Test form submission
+        await pageObject.fillUsername('testuser');
+        await pageObject.fillPassword('testpass');
+        await pageObject.clickSubmit();
         await pageObject.waitForPageLoad();
     });
 
-    test('should validate ${page.name} elements are visible', async ({ page }: { page: Page }) => {
-        ${elements.slice(0, 3).map(el => {
-                        const method = el.name.replace(/^(input|btn|el|txt)/, '');
-                        return `const ${el.name} = await pageObject.get${method.charAt(0).toUpperCase() + method.slice(1)}();\n        await expect(${el.name}).toBeVisible();`;
-                    }).join('\n        ')}
+    test('sample validation test - customize this', async ({ page }: { page: Page }) => {
+        const usernameInput = await pageObject.getUsernameInput();
+        await expect(usernameInput).toBeVisible();
+        
+        const submitButton = await pageObject.getSubmitButton();
+        await expect(submitButton).toBeEnabled();
     });
 });`;
             };
 
             const generatePOM = () => {
-                if (!testCode.trim() || pages.length === 0) {
-                    alert('Please add at least one page and provide test code');
+                if (pages.length === 0) {
+                    alert('Please add at least one page');
                     return;
                 }
 
-                const elements = extractElementsFromCode(testCode);
-                setDetectedElements(elements);
-
                 const files = {};
+
                 pages.forEach(page => {
-                    files[`pages/${page.name}.ts`] = generatePageObject(page, elements);
-                    files[`tests/${page.name.toLowerCase()}.spec.ts`] = generateTestFile(page, elements);
+                    files[`pages/${page.name}.ts`] = generateSamplePageObject(page);
+                    files[`tests/${page.name.toLowerCase()}.spec.ts`] = generateTestFile(page);
                 });
 
+                // Generate config files
                 files['playwright.config.ts'] = `import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
@@ -255,7 +209,6 @@ export default defineConfig({
         ignoreHTTPSErrors: true,
         actionTimeout: 10000,
     },
-
     projects: [
         {
             name: 'chromium',
@@ -284,18 +237,12 @@ export default defineConfig({
                     "name": "playwright-pom-framework",
                     "version": "1.0.0",
                     "description": "Playwright test automation framework with Page Object Model",
-                    "main": "index.js",
                     "scripts": {
                         "test": "playwright test",
                         "test:headed": "playwright test --headed",
                         "test:debug": "playwright test --debug",
                         "test:ui": "playwright test --ui",
-                        "test:chrome": "playwright test --project=chromium",
-                        "test:firefox": "playwright test --project=firefox",
-                        "test:webkit": "playwright test --project=webkit",
-                        "test:mobile": "playwright test --project='Mobile Chrome'",
-                        "report": "playwright show-report",
-                        "codegen": "playwright codegen"
+                        "report": "playwright show-report"
                     },
                     "keywords": ["playwright", "testing", "automation", "pom", "typescript"],
                     "author": "Hari Prasad MS",
@@ -315,93 +262,55 @@ export default defineConfig({
                         "strict": true,
                         "esModuleInterop": true,
                         "skipLibCheck": true,
-                        "forceConsistentCasingInFileNames": true,
-                        "resolveJsonModule": true,
-                        "moduleResolution": "node",
-                        "types": ["node", "@playwright/test"],
-                        "outDir": "./dist",
-                        "rootDir": "./"
+                        "types": ["node", "@playwright/test"]
                     },
-                    "include": ["tests/**/*", "pages/**/*"],
-                    "exclude": ["node_modules", "dist", "test-results", "playwright-report"]
+                    "include": ["tests/**/*", "pages/**/*"]
                 }, null, 2);
 
                 files['README.md'] = `# Playwright POM Framework
 
 ## 📋 Overview
-This is a test automation framework built with Playwright and TypeScript, following the Page Object Model (POM) design pattern.
+Generated Playwright test framework with Page Object Model pattern.
 
 **Base URL:** ${baseUrl}
 
-## 🚀 Installation
+## 🚀 Quick Start
 
 \`\`\`bash
 npm install
 npx playwright install
-\`\`\`
-
-### 🔧 Troubleshooting Installation
-
-**If you get SSL certificate errors:**
-
-\`\`\`bash
-# Option 1: Temporarily disable SSL
-npm config set strict-ssl false
-npx playwright install
-npm config set strict-ssl true
-
-# Option 2: Use environment variable
-export NODE_TLS_REJECT_UNAUTHORIZED=0
-npx playwright install
-\`\`\`
-
-## 🧪 Running Tests
-
-\`\`\`bash
-# Run all tests
 npm test
-
-# Run tests in headed mode
-npm run test:headed
-
-# Run tests in UI mode
-npm run test:ui
-
-# Run tests in specific browser
-npm run test:chrome
-npm run test:firefox
-npm run test:webkit
-npm run test:mobile
-
-# Debug tests
-npm run test:debug
-
-# View test report
-npm run report
 \`\`\`
 
-## 📁 Project Structure
+## 📝 Customization Guide
+
+The generated files contain sample code with TODO comments. Follow these steps:
+
+1. **Update Page Objects** (\`pages/*.ts\`):
+   - Replace sample locators with your actual page elements
+   - Add/remove getter methods as needed
+   - Customize action methods for your use case
+
+2. **Update Tests** (\`tests/*.spec.ts\`):
+   - Replace sample tests with your actual test scenarios
+   - Update test data and assertions
+
+3. **Configuration** (\`playwright.config.ts\`):
+   - Adjust browser settings if needed
+   - Update baseURL if required
+
+## 📁 Structure
 
 \`\`\`
-.
-├── pages/              # Page Object Models
-├── tests/              # Test specifications
+├── pages/              # Page Object Models (customize these!)
+├── tests/              # Test specifications (customize these!)
 ├── playwright.config.ts
 ├── package.json
-├── tsconfig.json
-└── README.md
+└── tsconfig.json
 \`\`\`
 
-## 🏗️ Page Object Model Pattern
-
-Each page object:
-- Encapsulates page-specific locators
-- Provides methods for page interactions
-- Handles wait conditions
-- Improves test maintainability
-
 ---
-Generated by [Playwright POM Generator](https://hariprasadms.github.io/)
+Generated by [Playwright POM Generator](https://hariprasadms.github.io/pomtestbuilder/)
 `;
 
                 files['.gitignore'] = `node_modules/
@@ -411,29 +320,16 @@ playwright/.cache/
 dist/
 .env
 *.log
-.DS_Store
 package-lock.json`;
-
-                files['.vscode/settings.json'] = JSON.stringify({
-                    "playwright.reuseBrowser": true,
-                    "playwright.showTrace": false,
-                    "files.associations": {
-                        "*.spec.ts": "typescript"
-                    },
-                    "editor.codeActionsOnSave": {
-                        "source.organizeImports": true
-                    },
-                    "typescript.tsdk": "node_modules/typescript/lib"
-                }, null, 2);
 
                 setGeneratedFiles(files);
                 setShowOutput(true);
+                setSelectedPageForView(null);
 
-                // Scroll to output after generation
                 setTimeout(() => {
                     const outputElement = document.getElementById('output-section');
                     if (outputElement) {
-                        outputElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        outputElement.scrollIntoView({ behavior: 'smooth' });
                     }
                 }, 100);
             };
@@ -452,7 +348,9 @@ package-lock.json`;
 
             const downloadAllFiles = async () => {
                 const zip = new JSZip();
-                Object.entries(generatedFiles).forEach(([name, content]) => zip.file(name, content));
+                Object.entries(generatedFiles).forEach(([name, content]) => {
+                    zip.file(name, content);
+                });
                 const blob = await zip.generateAsync({ type: 'blob' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -464,32 +362,20 @@ package-lock.json`;
                 URL.revokeObjectURL(url);
             };
 
-            const loadSample = () => {
-                setPages([{ name: 'TodoPage', url: 'https://demo.playwright.dev/todomvc' }]);
-                setBaseUrl('https://demo.playwright.dev/todomvc');
-            };
-
             return (
                 <div className="min-h-screen bg-gradient-to-br from-purple-600 to-indigo-700">
                     {/* Header */}
                     <header className="bg-white shadow-md sticky top-0 z-50">
                         <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
                             <div className="flex items-center gap-4">
-                                <h1 className="text-2xl font-bold text-purple-700">🎭 Playwright POM Generator</h1>
-                                <span className="bg-yellow-400 text-yellow-900 px-3 py-1 rounded-full text-xs font-bold animate-pulse">BETA</span>
+                                <a href="./" className="text-purple-700 hover:text-purple-900 transition font-medium">
+                                    ← Home
+                                </a>
+                                <h1 className="text-2xl font-bold text-purple-700">🎭 POM Generator</h1>
                             </div>
                             <nav className="flex gap-6">
-                                <button onClick={() => scrollToSection('features')} className="text-purple-700 hover:text-purple-900 font-medium transition hover:underline">
-                                    ✨ Features
-                                </button>
-                                <button onClick={() => scrollToSection('generator')} className="text-purple-700 hover:text-purple-900 font-medium transition hover:underline">
-                                    🚀 Generator
-                                </button>
                                 <a href="https://playwright.dev/docs/pom" target="_blank" rel="noopener noreferrer" className="text-purple-700 hover:text-purple-900 font-medium transition hover:underline">
                                     📚 Docs
-                                </a>
-                                <a href="https://github.com/microsoft/playwright" target="_blank" rel="noopener noreferrer" className="text-purple-700 hover:text-purple-900 font-medium transition hover:underline">
-                                    💻 GitHub
                                 </a>
                                 <a href="https://hariprasadms.github.io/" target="_blank" rel="noopener noreferrer" className="text-purple-700 hover:text-purple-900 font-medium transition hover:underline">
                                     👤 About
@@ -499,102 +385,14 @@ package-lock.json`;
                     </header>
 
                     <div className="p-6">
-                        {/* Hero Section */}
-                        <div className="max-w-6xl mx-auto mb-8">
-                            <div className="bg-white rounded-xl shadow-2xl overflow-hidden">
-                                <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 text-white p-12 text-center relative overflow-hidden">
-                                    {/* Animated background circles */}
-                                    <div className="absolute top-0 left-0 w-64 h-64 bg-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
-                                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
-                                    <div className="absolute bottom-0 left-1/2 w-64 h-64 bg-pink-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
-
-                                    <div className="relative z-10">
-                                        <h2 className="text-4xl md:text-5xl font-bold mb-4">Transform Tests into Page Objects</h2>
-                                        <p className="text-xl md:text-2xl mb-6 text-purple-100">Professional TypeScript Framework Generator</p>
-                                        <button onClick={loadSample} className="bg-white text-purple-700 px-8 py-3 rounded-lg font-bold text-lg hover:bg-gray-100 transition shadow-lg transform hover:scale-105">
-                                            📝 Try Sample Application
-                                        </button>
-                                    </div>
-                                </div>
+                        <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-2xl">
+                            <div className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white p-8 text-center">
+                                <h2 className="text-3xl font-bold mb-2">Generate Page Object Models</h2>
+                                <p className="text-purple-100">Create TypeScript page objects with sample code you can customize</p>
                             </div>
-                        </div>
 
-                        {/* Features Section */}
-                        <div id="features" className="max-w-6xl mx-auto mb-8 scroll-mt-20">
-                            <div className="bg-white rounded-xl shadow-2xl p-8">
-                                <h2 className="text-3xl font-bold text-center mb-8 text-gray-800">
-                                    ✨ Powerful Features
-                                </h2>
-                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {/* Feature 1 */}
-                                    <div className="group bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border-2 border-blue-200 hover:border-blue-400 transition transform hover:-translate-y-2 hover:shadow-xl">
-                                        <div className="text-4xl mb-4 group-hover:scale-110 transition">🎨</div>
-                                        <h3 className="text-xl font-bold mb-3 text-blue-900">User-Friendly Interface</h3>
-                                        <p className="text-gray-700">Simplifies the process of creating POMs with clear, intuitive input fields and step-by-step guidance.</p>
-                                    </div>
-
-                                    {/* Feature 2 */}
-                                    <div className="group bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl border-2 border-purple-200 hover:border-purple-400 transition transform hover:-translate-y-2 hover:shadow-xl">
-                                        <div className="text-4xl mb-4 group-hover:scale-110 transition">⚡</div>
-                                        <h3 className="text-xl font-bold mb-3 text-purple-900">Automated POM Generation</h3>
-                                        <p className="text-gray-700">Convert UI elements from screenshots into structured Page Object Model format with smart element detection.</p>
-                                    </div>
-
-                                    {/* Feature 3 */}
-                                    <div className="group bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl border-2 border-green-200 hover:border-green-400 transition transform hover:-translate-y-2 hover:shadow-xl">
-                                        <div className="text-4xl mb-4 group-hover:scale-110 transition">🌐</div>
-                                        <h3 className="text-xl font-bold mb-3 text-green-900">Support for Application URLs</h3>
-                                        <p className="text-gray-700">Include your app URL to generate context-aware tests with proper configuration and navigation.</p>
-                                    </div>
-
-                                    {/* Feature 4 */}
-                                    <div className="group bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border-2 border-orange-200 hover:border-orange-400 transition transform hover:-translate-y-2 hover:shadow-xl">
-                                        <div className="text-4xl mb-4 group-hover:scale-110 transition">🔧</div>
-                                        <h3 className="text-xl font-bold mb-3 text-orange-900">Test Structure</h3>
-                                        <p className="text-gray-700">Automatically generates before and after methods for organized testing with proper setup and teardown.</p>
-                                    </div>
-
-                                    {/* Feature 5 */}
-                                    <div className="group bg-gradient-to-br from-pink-50 to-pink-100 p-6 rounded-xl border-2 border-pink-200 hover:border-pink-400 transition transform hover:-translate-y-2 hover:shadow-xl">
-                                        <div className="text-4xl mb-4 group-hover:scale-110 transition">📦</div>
-                                        <h3 className="text-xl font-bold mb-3 text-pink-900">Downloadable Packages</h3>
-                                        <p className="text-gray-700">Provides a ready-to-use ZIP file containing the POM, test scripts, and utility functions.</p>
-                                    </div>
-
-                                    {/* Feature 6 */}
-                                    <div className="group bg-gradient-to-br from-indigo-50 to-indigo-100 p-6 rounded-xl border-2 border-indigo-200 hover:border-indigo-400 transition transform hover:-translate-y-2 hover:shadow-xl">
-                                        <div className="text-4xl mb-4 group-hover:scale-110 transition">🖼️</div>
-                                        <h3 className="text-xl font-bold mb-3 text-indigo-900">Screenshot Analysis</h3>
-                                        <p className="text-gray-700">Upload screenshots for visual reference and better understanding of UI element structure.</p>
-                                    </div>
-                                </div>
-
-                                {/* Stats/Benefits Bar */}
-                                <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                                    <div className="p-4 bg-purple-100 rounded-lg">
-                                        <div className="text-3xl font-bold text-purple-700">100%</div>
-                                        <div className="text-sm text-gray-600">TypeScript</div>
-                                    </div>
-                                    <div className="p-4 bg-blue-100 rounded-lg">
-                                        <div className="text-3xl font-bold text-blue-700">0</div>
-                                        <div className="text-sm text-gray-600">Manual Setup</div>
-                                    </div>
-                                    <div className="p-4 bg-green-100 rounded-lg">
-                                        <div className="text-3xl font-bold text-green-700">5+</div>
-                                        <div className="text-sm text-gray-600">Browsers</div>
-                                    </div>
-                                    <div className="p-4 bg-orange-100 rounded-lg">
-                                        <div className="text-3xl font-bold text-orange-700">VSCode</div>
-                                        <div className="text-sm text-gray-600">Ready</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Main Generator Section */}
-                        <div id="generator" className="max-w-6xl mx-auto bg-white rounded-xl shadow-2xl scroll-mt-20">
                             <div className="p-8">
-                                {/* Base URL Configuration */}
+                                {/* Base URL */}
                                 <div className="mb-6 p-6 bg-blue-50 rounded-lg border-l-4 border-blue-600">
                                     <h2 className="text-2xl font-semibold text-blue-700 mb-4">🌐 Application Base URL</h2>
                                     <input
@@ -604,14 +402,14 @@ package-lock.json`;
                                         onChange={(e) => setBaseUrl(e.target.value)}
                                         placeholder="https://your-application.com"
                                     />
-                                    <p className="text-sm text-gray-600 mt-2">This will be used as the base URL in playwright.config.ts and tests</p>
+                                    <p className="text-sm text-gray-600 mt-2">This will be used in your test configuration</p>
                                 </div>
 
                                 {/* Page Configuration */}
                                 <div className="mb-6 p-6 bg-gray-50 rounded-lg border-l-4 border-purple-600">
-                                    <h2 className="text-2xl font-semibold text-purple-700 mb-4">📄 Step 1: Configure Pages</h2>
+                                    <h2 className="text-2xl font-semibold text-purple-700 mb-4">📄 Add Pages</h2>
                                     <div className="mb-3">
-                                        <label className="block mb-2 font-semibold text-gray-700">Page Name</label>
+                                        <label className="block mb-2 font-semibold text-gray-700">Page Name (must end with "Page")</label>
                                         <input
                                             type="text"
                                             className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
@@ -621,7 +419,7 @@ package-lock.json`;
                                         />
                                     </div>
                                     <div className="mb-3">
-                                        <label className="block mb-2 font-semibold text-gray-700">Page URL Path (optional)</label>
+                                        <label className="block mb-2 font-semibold text-gray-700">Page URL (optional)</label>
                                         <input
                                             type="text"
                                             className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
@@ -643,141 +441,120 @@ package-lock.json`;
                                     </div>
                                 </div>
 
-                                {/* Test Code */}
-                                <div className="mb-6 p-6 bg-gray-50 rounded-lg border-l-4 border-purple-600">
-                                    <h2 className="text-2xl font-semibold text-purple-700 mb-4">📝 Step 2: Provide Test Code</h2>
-                                    <div className="mb-3">
-                                        <label className="block mb-2 font-semibold text-gray-700">Paste your Playwright test code</label>
-                                        <textarea
-                                            className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none font-mono text-sm"
-                                            rows="12"
-                                            value={testCode}
-                                            onChange={(e) => setTestCode(e.target.value)}
-                                            placeholder="Paste your Playwright test code here..."
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block mb-2 font-semibold text-gray-700">Or upload a test file</label>
-                                        <input
-                                            type="file"
-                                            accept=".ts,.js"
-                                            onChange={handleTestFileUpload}
-                                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Screenshot */}
-                                <div className="mb-6 p-6 bg-gray-50 rounded-lg border-l-4 border-purple-600">
-                                    <h2 className="text-2xl font-semibold text-purple-700 mb-4">🖼️ Step 3: Upload Screenshot (Optional)</h2>
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={handleScreenshotUpload}
-                                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer"
-                                    />
-                                    {screenshotPreview && (
-                                        <div className="mt-4">
-                                            <img src={screenshotPreview} alt="Screenshot preview" className="max-h-64 rounded-lg border-2 border-gray-300 shadow-lg" />
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Generate */}
+                                {/* Generate Buttons */}
                                 <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border-2 border-purple-300">
-                                    <h2 className="text-2xl font-semibold text-purple-700 mb-4">⚡ Step 4: Generate Framework</h2>
+                                    <h2 className="text-2xl font-semibold text-purple-700 mb-4">⚡ Generate Framework</h2>
                                     <div className="flex gap-3 flex-wrap">
-                                        <button onClick={generatePOM} className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-8 py-3 rounded-lg font-bold hover:from-purple-700 hover:to-purple-800 transition shadow-lg transform hover:scale-105">
+                                        <button onClick={generatePOM} disabled={pages.length === 0} className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-8 py-3 rounded-lg font-bold hover:from-purple-700 hover:to-purple-800 transition shadow-lg transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
                                             🚀 Generate POM
                                         </button>
-                                        <button onClick={() => { generatePOM(); setTimeout(downloadAllFiles, 500); }} className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-8 py-3 rounded-lg font-bold hover:from-indigo-700 hover:to-indigo-800 transition shadow-lg transform hover:scale-105">
+                                        <button onClick={() => { generatePOM(); setTimeout(downloadAllFiles, 500); }} disabled={pages.length === 0} className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-8 py-3 rounded-lg font-bold hover:from-indigo-700 hover:to-indigo-800 transition shadow-lg transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
                                             📦 Generate & Download ZIP
                                         </button>
                                     </div>
                                 </div>
 
-                                {/* Output */}
+                                {/* Output Section */}
                                 {showOutput && (
-                                    <div id="output-section" className="mt-8 scroll-mt-20">
+                                    <div id="output-section" className="mt-8">
                                         <div className="bg-gradient-to-r from-green-100 to-green-200 border-l-4 border-green-500 text-green-800 p-4 rounded-lg mb-6 shadow-md">
-                                            ✅ Generated {Object.keys(generatedFiles).length} files successfully!
+                                            ✅ Generated {Object.keys(generatedFiles).length} files successfully! Sample code included - customize for your needs.
                                         </div>
 
+                                        {/* Page File Viewer */}
+                                        <div className="mb-6 p-6 bg-purple-50 rounded-lg border-2 border-purple-300">
+                                            <h3 className="text-xl font-bold text-purple-700 mb-4">👁️ View Generated Page Files</h3>
+                                            <div className="flex flex-wrap gap-2 mb-4">
+                                                {Object.keys(generatedFiles).filter(f => f.startsWith('pages/')).map(f => (
+                                                    <button
+                                                        key={f}
+                                                        onClick={() => setSelectedPageForView(f)}
+                                                        className={`px-4 py-2 rounded-lg font-semibold transition ${selectedPageForView === f ? 'bg-purple-700 text-white' : 'bg-white text-purple-700 hover:bg-purple-100'}`}
+                                                    >
+                                                        {f.split('/').pop().replace('.ts', '')}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {selectedPageForView && (
+                                                <div>
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <h4 className="font-bold text-lg text-purple-700">{selectedPageForView}</h4>
+                                                        <button onClick={() => downloadFile(selectedPageForView)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                                                            💾 Download
+                                                        </button>
+                                                    </div>
+                                                    <pre className="rounded-lg overflow-hidden">
+                                                        <code className="typescript">{generatedFiles[selectedPageForView]}</code>
+                                                    </pre>
+                                                </div>
+                                            )}
+                                            {!selectedPageForView && (
+                                                <p className="text-gray-600 text-center py-8">Click on a page name above to view its generated code</p>
+                                            )}
+                                        </div>
+
+                                        {/* Tabs for other files */}
                                         <div className="flex gap-2 mb-4 border-b-2 border-gray-200 flex-wrap">
-                                            {['pageObjects', 'tests', 'config', 'elements'].map(tab => (
-                                                <button
-                                                    key={tab}
-                                                    onClick={() => setActiveTab(tab)}
+                                            {['tests', 'config'].map(tab => (
+                                                <button 
+                                                    key={tab} 
+                                                    onClick={() => setActiveTab(tab)} 
                                                     className={`px-6 py-3 font-semibold transition ${activeTab === tab ? 'text-purple-700 border-b-4 border-purple-700' : 'text-gray-600 hover:text-purple-600'}`}
                                                 >
-                                                    {tab === 'pageObjects' && '📄 Page Objects'}
                                                     {tab === 'tests' && '🧪 Tests'}
                                                     {tab === 'config' && '⚙️ Configuration'}
-                                                    {tab === 'elements' && `🎯 Elements (${detectedElements.length})`}
                                                 </button>
                                             ))}
                                         </div>
 
-                                        {activeTab === 'pageObjects' && Object.keys(generatedFiles).filter(f => f.startsWith('pages')).map(f => (
-                                            <div key={f} className="mb-6">
-                                                <h3 className="font-bold text-lg mb-2 text-purple-700">{f}</h3>
-                                                <pre className="rounded-lg overflow-hidden"><code className="typescript">{generatedFiles[f]}</code></pre>
-                                                <button onClick={() => downloadFile(f)} className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md transform hover:scale-105">
-                                                    💾 Download {f.split('/').pop()}
-                                                </button>
-                                            </div>
-                                        ))}
-
-                                        {activeTab === 'tests' && Object.keys(generatedFiles).filter(f => f.startsWith('tests')).map(f => (
-                                            <div key={f} className="mb-6">
-                                                <h3 className="font-bold text-lg mb-2 text-purple-700">{f}</h3>
-                                                <pre className="rounded-lg overflow-hidden"><code className="typescript">{generatedFiles[f]}</code></pre>
-                                                <button onClick={() => downloadFile(f)} className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md transform hover:scale-105">
-                                                    💾 Download {f.split('/').pop()}
-                                                </button>
-                                            </div>
-                                        ))}
-
-                                        {activeTab === 'config' && ['playwright.config.ts', 'package.json', 'tsconfig.json', 'README.md', '.gitignore', '.vscode/settings.json'].map(f => (
-                                            generatedFiles[f] && (
-                                                <div key={f} className="mb-6">
-                                                    <h3 className="font-bold text-lg mb-2 text-purple-700">{f}</h3>
-                                                    <pre className="rounded-lg overflow-hidden"><code className={f.endsWith('.json') ? 'json' : f.endsWith('.ts') ? 'typescript' : 'plaintext'}>{generatedFiles[f]}</code></pre>
-                                                    <button onClick={() => downloadFile(f)} className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md transform hover:scale-105">
-                                                        💾 Download {f.split('/').pop()}
-                                                    </button>
-                                                </div>
-                                            )
-                                        ))}
-
-                                        {activeTab === 'elements' && (
+                                        {activeTab === 'tests' && (
                                             <div>
-                                                <h3 className="font-bold text-lg mb-3 text-purple-700">Detected UI Elements:</h3>
-                                                {detectedElements.length > 0 ? (
-                                                    detectedElements.map((el, i) => (
-                                                        <div key={i} className="bg-white p-4 mb-3 rounded-lg border-l-4 border-purple-600 shadow-md hover:shadow-lg transition">
-                                                            <div className="flex items-start justify-between">
-                                                                <div>
-                                                                    <strong className="text-purple-700 text-lg">{el.name}</strong>
-                                                                    <span className="ml-3 px-2 py-1 bg-purple-100 text-purple-700 rounded text-sm">{el.type}</span>
-                                                                </div>
-                                                            </div>
-                                                            <code className="block mt-2 bg-gray-100 px-3 py-2 rounded text-sm">{el.selector}</code>
+                                                {Object.keys(generatedFiles).filter(f => f.startsWith('tests')).map(f => (
+                                                    <div key={f} className="mb-6">
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <h3 className="font-bold text-lg text-purple-700">{f}</h3>
+                                                            <button onClick={() => downloadFile(f)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                                                                💾 Download
+                                                            </button>
                                                         </div>
-                                                    ))
-                                                ) : (
-                                                    <p className="text-gray-600">No elements detected in test code. Make sure your code contains page interactions.</p>
-                                                )}
+                                                        <pre className="rounded-lg overflow-hidden">
+                                                            <code className="typescript">{generatedFiles[f]}</code>
+                                                        </pre>
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
 
+                                        {activeTab === 'config' && (
+                                            <div>
+                                                {['playwright.config.ts', 'package.json', 'tsconfig.json', 'README.md', '.gitignore'].map(f => (
+                                                    generatedFiles[f] && (
+                                                        <div key={f} className="mb-6">
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <h3 className="font-bold text-lg text-purple-700">{f}</h3>
+                                                                <button onClick={() => downloadFile(f)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                                                                    💾 Download
+                                                                </button>
+                                                            </div>
+                                                            <pre className="rounded-lg overflow-hidden">
+                                                                <code className={f.endsWith('.json') ? 'json' : f.endsWith('.ts') ? 'typescript' : 'plaintext'}>
+                                                                    {generatedFiles[f]}
+                                                                </code>
+                                                            </pre>
+                                                        </div>
+                                                    )
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Download All */}
                                         <div className="mt-8 p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border-2 border-purple-300">
                                             <h3 className="text-xl font-semibold mb-4">📦 Download Complete Framework</h3>
                                             <button onClick={downloadAllFiles} className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white px-8 py-4 rounded-lg font-bold text-lg hover:from-purple-700 hover:to-indigo-800 shadow-lg transition transform hover:scale-105">
                                                 📦 Download ZIP Archive
                                             </button>
                                             <p className="mt-3 text-gray-600 text-sm">
-                                                Includes: Page Objects, Tests with before/after hooks, Configuration files, VSCode settings, and README
+                                                Includes: Page Objects with sample code, Tests, Config files, and README with customization guide
                                             </p>
                                         </div>
                                     </div>
@@ -785,86 +562,11 @@ package-lock.json`;
                             </div>
                         </div>
                     </div>
-
-                    {/* Footer */}
-                    <footer className="bg-gray-900 text-white py-10 mt-12">
-                        <div className="max-w-6xl mx-auto px-6">
-                            {/* Main Footer Content */}
-                            <div className="grid md:grid-cols-3 gap-8 mb-8">
-                                <div>
-                                    <h3 className="text-xl font-bold mb-3 flex items-center gap-2">
-                                        <span>🎭</span>
-                                        <span>Playwright POM Generator</span>
-                                    </h3>
-                                    <p className="text-gray-400 text-sm leading-relaxed">
-                                        Professional test automation framework generator for Playwright with TypeScript and Page Object Model pattern.
-                                    </p>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold mb-3 text-purple-400">Quick Links</h4>
-                                    <ul className="space-y-2 text-sm">
-                                        <li><a href="https://playwright.dev" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition">Playwright Docs</a></li>
-                                        <li><a href="https://playwright.dev/docs/pom" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition">POM Pattern Guide</a></li>
-                                        <li><a href="https://github.com/microsoft/playwright" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition">Playwright GitHub</a></li>
-                                        <li><a href="https://www.typescriptlang.org/" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition">TypeScript Docs</a></li>
-                                    </ul>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold mb-3 text-purple-400">Created By</h4>
-                                    <div className="space-y-3">
-                                        <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                                            <p className="text-sm text-gray-300 font-semibold mb-2">Hariprasad MS</p>
-                                            <p className="text-xs text-gray-400 mb-2">Senior QA Automation Engineer</p>
-                                            <a href="https://hariprasadms.github.io/" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 text-sm underline transition block">
-                                                🌐 hariprasadms.github.io
-                                            </a>
-                                        </div>
-                                        <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                                            <p className="text-sm text-gray-300 font-semibold mb-1">SDET Experts Ltd</p>
-                                            <p className="text-xs text-gray-400">Software Development & Engineering Research</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Separator */}
-                            <div className="border-t border-gray-800 mb-6"></div>
-
-                            {/* Bottom Footer */}
-                            <div className="text-center space-y-3">
-                                <p className="text-gray-400 text-sm">
-                                    © {new Date().getFullYear()} Playwright POM Generator. All rights reserved.
-                                </p>
-                                <p className="text-purple-400 font-medium">
-                                    Crafted with ❤️ for automation testers, by automation testers
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                    Developed by <span className="text-purple-400 font-semibold">Hariprasad MS</span> at <span className="text-purple-400 font-semibold">SDET Experts Ltd</span>
-                                </p>
-                            </div>
-                        </div>
-                    </footer>
                 </div>
             );
         }
 
-        // Add custom animations
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes blob {
-                0%, 100% { transform: translate(0, 0) scale(1); }
-                33% { transform: translate(30px, -50px) scale(1.1); }
-                66% { transform: translate(-20px, 20px) scale(0.9); }
-            }
-            .animate-blob { animation: blob 7s infinite; }
-            .animation-delay-2000 { animation-delay: 2s; }
-            .animation-delay-4000 { animation-delay: 4s; }
-            .scroll-mt-20 { scroll-margin-top: 5rem; }
-        `;
-        document.head.appendChild(style);
-
         ReactDOM.render(<App />, document.getElementById('root'));
     </script>
 </body>
-
 </html>
